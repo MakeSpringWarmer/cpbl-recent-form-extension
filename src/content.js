@@ -1,5 +1,7 @@
 const CPBL_RFV_ID = "cpbl-rfv-panel";
 const DEFAULT_GAME_COUNT = 5;
+const PLAYER_GAME_COUNT_OPTIONS = [3, 5, 10];
+const TEAM_GAME_COUNT_OPTIONS = [5, 10, 15];
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 init();
@@ -7,31 +9,96 @@ init();
 async function init() {
   if (document.getElementById(CPBL_RFV_ID)) return;
 
+  if (location.pathname.toLowerCase() === "/team/dailyrecord") {
+    await initTeamDailyRecord();
+    return;
+  }
+
   const acnt = new URL(location.href).searchParams.get("Acnt");
   if (!acnt) return;
 
   const mount = findMountPoint();
-  if (!mount) return;
+  if (!mount?.element) return;
 
   const panel = createPanel();
-  mount.insertAdjacentElement("beforebegin", panel);
+  mount.element.insertAdjacentElement(mount.position, panel);
   renderMessage(panel, "正在讀取近期表現...");
 
   try {
     const settings = await getSettings();
     const context = extractPageContext();
     const data = await getRecentFollowScore(acnt, context, settings.gameCount);
-    renderStats(panel, data, settings.gameCount);
+    const initialCount = normalizeCountForOptions(settings.gameCount, PLAYER_GAME_COUNT_OPTIONS, DEFAULT_GAME_COUNT);
+    const renderPlayer = (gameCount) => {
+      const nextData = buildRecentData(data.sourceRows, data.sourceContext, gameCount);
+      renderStats(panel, nextData, gameCount, async (nextCount) => {
+        await saveGameCount(nextCount);
+        renderPlayer(nextCount);
+      });
+    };
+    renderPlayer(initialCount);
   } catch (error) {
     renderMessage(panel, "暫時無法讀取 CPBL 數據。", true);
     console.debug("[CPBL RFV]", error);
   }
 }
 
+async function initTeamDailyRecord() {
+  const mount = findTeamMountPoint();
+  if (!mount?.element) return;
+
+  const panel = createPanel();
+  mount.element.insertAdjacentElement(mount.position, panel);
+  renderTeamMessage(panel, "正在讀取球隊近況...");
+
+  try {
+    const settings = await getSettings();
+    const rows = await waitForDailyRecordRows();
+    const initialCount = normalizeCountForOptions(settings.gameCount, TEAM_GAME_COUNT_OPTIONS, 10);
+    const renderTeam = (gameCount) => {
+      const data = buildTeamDailyRecordData(rows, gameCount);
+      renderTeamDailyRecord(panel, data, gameCount, async (nextCount) => {
+        await saveGameCount(nextCount);
+        renderTeam(nextCount);
+      });
+    };
+    renderTeam(initialCount);
+  } catch (error) {
+    renderTeamMessage(panel, "暫時無法讀取逐日戰績。", true);
+    console.debug("[CPBL RFV]", error);
+  }
+}
+
 function findMountPoint() {
-  return document.querySelector("#bindVue .DistTitle") ||
-    document.querySelector(".RecordTableWrap") ||
-    document.querySelector("#bindVue");
+  const contentHeader = document.querySelector(".ContHeader");
+  if (contentHeader) return { element: contentHeader, position: "afterend" };
+
+  const tableTitle = document.querySelector("#bindVue .DistTitle");
+  if (tableTitle) return { element: tableTitle, position: "beforebegin" };
+
+  const tableWrap = document.querySelector(".RecordTableWrap");
+  if (tableWrap) return { element: tableWrap, position: "beforebegin" };
+
+  const bindVue = document.querySelector("#bindVue");
+  if (bindVue) return { element: bindVue, position: "afterbegin" };
+
+  return null;
+}
+
+function findTeamMountPoint() {
+  const playerHeader = document.querySelector(".PlayerHeader");
+  if (playerHeader) return { element: playerHeader, position: "afterend" };
+
+  const contentHeader = document.querySelector(".ContHeader");
+  if (contentHeader) return { element: contentHeader, position: "afterend" };
+
+  const tableTitle = document.querySelector("#bindVue .DistTitle");
+  if (tableTitle) return { element: tableTitle, position: "beforebegin" };
+
+  const bindVue = document.querySelector("#bindVue");
+  if (bindVue) return { element: bindVue, position: "afterbegin" };
+
+  return null;
 }
 
 function createPanel() {
@@ -59,7 +126,286 @@ function renderMessage(panel, text, isError = false) {
   panel.append(header, message);
 }
 
-function renderStats(panel, data, gameCount) {
+function renderTeamMessage(panel, text, isError = false) {
+  panel.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "cpbl-rfv-header";
+  header.innerHTML = `
+    <div>
+      <div class="cpbl-rfv-eyebrow">CPBL Team Form</div>
+      <div class="cpbl-rfv-title">球隊近況</div>
+    </div>
+    <div class="cpbl-rfv-subtitle">資料來源：CPBL 官網</div>
+  `;
+  const message = document.createElement("div");
+  message.className = `cpbl-rfv-message${isError ? " cpbl-rfv-error" : ""}`;
+  message.textContent = text;
+  panel.append(header, message);
+}
+
+function renderTeamDailyRecord(panel, data, gameCount, onGameCountChange) {
+  panel.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "cpbl-rfv-header";
+  header.innerHTML = `
+    <div>
+      <div class="cpbl-rfv-eyebrow">CPBL Team Form</div>
+      <div class="cpbl-rfv-title">${escapeHtml(data.teamName)} 近 ${data.games.length} 場</div>
+    </div>
+    <div class="cpbl-rfv-toolbar">
+      <div class="cpbl-rfv-meta">
+        <span>${escapeHtml(data.dateRange)}</span>
+        <span>逐日戰績</span>
+      </div>
+      ${renderGameCountControl(gameCount, TEAM_GAME_COUNT_OPTIONS)}
+    </div>
+  `;
+  panel.appendChild(header);
+  attachGameCountControl(header, onGameCountChange);
+
+  if (data.games.length === 0) {
+    const message = document.createElement("div");
+    message.className = "cpbl-rfv-message";
+    message.textContent = "目前沒有可計算的近期比賽。";
+    panel.appendChild(message);
+    return;
+  }
+
+  const summary = document.createElement("div");
+  summary.className = "cpbl-rfv-summary";
+  summary.innerHTML = `
+    <div class="cpbl-rfv-summary-label">球隊速記</div>
+    <div class="cpbl-rfv-summary-text">${escapeHtml(data.summary)}</div>
+  `;
+  panel.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "cpbl-rfv-body";
+  const grid = document.createElement("div");
+  grid.className = "cpbl-rfv-grid";
+  data.metrics.forEach((metric) => {
+    const card = document.createElement("div");
+    card.className = "cpbl-rfv-card";
+    card.innerHTML = `
+      <div class="cpbl-rfv-label">${escapeHtml(metric.label)}</div>
+      <div class="cpbl-rfv-value">${escapeHtml(metric.value)}</div>
+      <div class="cpbl-rfv-note">${escapeHtml(metric.note)}</div>
+    `;
+    grid.appendChild(card);
+  });
+  body.appendChild(grid);
+  panel.appendChild(body);
+
+  const stripHeader = document.createElement("div");
+  stripHeader.className = "cpbl-rfv-strip-header";
+  stripHeader.innerHTML = `
+    <div class="cpbl-rfv-strip-title">近期走勢</div>
+    <div class="cpbl-rfv-strip-meta">左舊右新</div>
+  `;
+  panel.appendChild(stripHeader);
+
+  const strip = document.createElement("div");
+  strip.className = "cpbl-rfv-team-strip";
+  strip.innerHTML = data.games.slice().reverse().map(renderTeamGameChip).join("");
+  panel.appendChild(strip);
+
+  const details = document.createElement("details");
+  details.className = "cpbl-rfv-details";
+  details.innerHTML = `
+    <summary>
+      <span class="cpbl-rfv-details-title">近 ${data.games.length} 場明細</span>
+      <span class="cpbl-rfv-details-meta">${escapeHtml(data.dateRange)}</span>
+    </summary>
+  `;
+  const games = document.createElement("div");
+  games.className = "cpbl-rfv-games";
+  games.innerHTML = renderTeamGameTable(data.games);
+  details.appendChild(games);
+  panel.appendChild(details);
+}
+
+function renderTeamGameChip(game) {
+  return `
+    <div class="cpbl-rfv-team-chip is-${escapeHtml(game.resultTone)}">
+      <div class="cpbl-rfv-team-chip-result">${escapeHtml(game.result)}</div>
+      <div class="cpbl-rfv-team-chip-score">${escapeHtml(`${game.runsFor}-${game.runsAgainst}`)}</div>
+      <div class="cpbl-rfv-team-chip-date">${escapeHtml(shortDate(game.date))}</div>
+      <div class="cpbl-rfv-team-chip-opponent">${escapeHtml(game.homeAway)} ${escapeHtml(game.opponent)}</div>
+    </div>
+  `;
+}
+
+function renderTeamGameTable(games) {
+  const rows = games.map((game) => `
+    <tr>
+      <td>${escapeHtml(formatDate(game.date))}</td>
+      <td>${escapeHtml(game.opponent)}</td>
+      <td>${escapeHtml(game.homeAway)}</td>
+      <td>${escapeHtml(game.result)}</td>
+      <td>${escapeHtml(`${game.runsFor}-${game.runsAgainst}`)}</td>
+      <td>${escapeHtml(game.field)}</td>
+      <td>${escapeHtml(game.duration)}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <table>
+      <thead>
+        <tr><th>日期</th><th>對戰</th><th>主客</th><th>結果</th><th>比分</th><th>球場</th><th>時間</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function waitForDailyRecordRows() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const rows = getDailyRecordRows();
+    if (rows.length > 0) return rows;
+    await delay(250);
+  }
+  throw new Error("daily record rows not found");
+}
+
+function getDailyRecordRows() {
+  const table = document.querySelector("#bindVue .RecordTable table") ||
+    document.querySelector(".RecordTable table");
+  if (!table) return [];
+
+  return Array.from(table.querySelectorAll("tr"))
+    .map((row) => Array.from(row.querySelectorAll("td")).map((cell) => normalizeText(cell.textContent)))
+    .filter((cells) => cells.length >= 9);
+}
+
+function buildTeamDailyRecordData(rows, gameCount) {
+  const teamName = getCurrentTeamName();
+  const games = rows
+    .map((cells) => parseTeamGameRow(cells, teamName))
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, gameCount);
+  const metrics = calculateTeamMetrics(games);
+
+  return {
+    teamName,
+    games,
+    dateRange: formatDateRange(games.map((game) => ({ GameDate: game.date }))),
+    metrics,
+    summary: summarizeTeamForm(games, metrics)
+  };
+}
+
+function parseTeamGameRow(cells, teamName) {
+  const awayTeam = cells[4];
+  const awayScore = Number(cells[5]);
+  const homeTeam = cells[6];
+  const homeScore = Number(cells[7]);
+  const winner = cells[8];
+  const date = parseCpblDate(cells[2]);
+  if (!date || !Number.isFinite(awayScore) || !Number.isFinite(homeScore)) return null;
+
+  const isHome = sameTeamName(homeTeam, teamName);
+  const isAway = sameTeamName(awayTeam, teamName);
+  if (!isHome && !isAway) return null;
+
+  const runsFor = isHome ? homeScore : awayScore;
+  const runsAgainst = isHome ? awayScore : homeScore;
+  const opponent = isHome ? awayTeam : homeTeam;
+  const isTie = runsFor === runsAgainst || !winner;
+  const result = isTie ? "T" : runsFor > runsAgainst ? "W" : "L";
+
+  return {
+    gameNo: cells[0],
+    field: cells[1],
+    date,
+    duration: cells[3],
+    opponent,
+    homeAway: isHome ? "主" : "客",
+    runsFor,
+    runsAgainst,
+    result,
+    resultTone: result === "W" ? "win" : result === "L" ? "loss" : "tie"
+  };
+}
+
+function calculateTeamMetrics(games) {
+  const wins = games.filter((game) => game.result === "W").length;
+  const losses = games.filter((game) => game.result === "L").length;
+  const ties = games.filter((game) => game.result === "T").length;
+  const runsFor = games.reduce((sum, game) => sum + game.runsFor, 0);
+  const runsAgainst = games.reduce((sum, game) => sum + game.runsAgainst, 0);
+  const homeGames = games.filter((game) => game.homeAway === "主");
+  const homeWins = homeGames.filter((game) => game.result === "W").length;
+  const homeLosses = homeGames.filter((game) => game.result === "L").length;
+  const homeTies = homeGames.filter((game) => game.result === "T").length;
+
+  return [
+    { label: "近況", value: formatRecord(wins, losses, ties), note: `近 ${games.length} 場` },
+    { label: "得失分", value: `${runsFor}-${runsAgainst}`, note: `分差 ${formatRunDiff(runsFor - runsAgainst)}` },
+    { label: "場均得分", value: formatDecimal(divide(runsFor, games.length), 1), note: `場均失分 ${formatDecimal(divide(runsAgainst, games.length), 1)}` },
+    { label: "主場", value: formatRecord(homeWins, homeLosses, homeTies), note: `${homeGames.length} 場` }
+  ];
+}
+
+function summarizeTeamForm(games, metrics) {
+  if (games.length === 0) return "近期沒有可計算的比賽。";
+  const [recordMetric, runMetric] = metrics;
+  const latest = games[0];
+  const streak = calculateTeamStreak(games);
+  return `近 ${games.length} 場 ${recordMetric.value}，得失分 ${runMetric.value}；目前${streak}，最近一場 ${formatDate(latest.date)} ${latest.homeAway}場對 ${latest.opponent} ${latest.result} ${latest.runsFor}-${latest.runsAgainst}。`;
+}
+
+function calculateTeamStreak(games) {
+  const firstResult = games[0]?.result;
+  if (!firstResult) return "無連續紀錄";
+  let count = 0;
+  for (const game of games) {
+    if (game.result !== firstResult) break;
+    count += 1;
+  }
+  const label = firstResult === "W" ? "連勝" : firstResult === "L" ? "連敗" : "連和";
+  return `${count}${label}`;
+}
+
+function getCurrentTeamName() {
+  const title = document.querySelector(".PageTitle h2");
+  if (title) {
+    const clone = title.cloneNode(true);
+    clone.querySelectorAll(".en").forEach((node) => node.remove());
+    const text = normalizeText(clone.textContent);
+    if (text) return text;
+  }
+
+  return normalizeText(document.querySelector(".ContHeader")?.textContent) || "球隊";
+}
+
+function sameTeamName(value, teamName) {
+  return normalizeTeamName(value) === normalizeTeamName(teamName);
+}
+
+function normalizeTeamName(value) {
+  return normalizeText(value)
+    .replace(/Monkeys|Brothers|Lions|Guardians|Dragons|TSG Hawks/gi, "")
+    .replace(/\s+/g, "");
+}
+
+function parseCpblDate(value) {
+  const match = String(value || "").match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (!match) return null;
+  return `${match[1]}/${match[2].padStart(2, "0")}/${match[3].padStart(2, "0")}`;
+}
+
+function formatRecord(wins, losses, ties) {
+  return ties > 0 ? `${wins}W-${losses}L-${ties}T` : `${wins}W-${losses}L`;
+}
+
+function formatRunDiff(value) {
+  if (value > 0) return `+${value}`;
+  return String(value);
+}
+
+function renderStats(panel, data, gameCount, onGameCountChange) {
   panel.innerHTML = "";
 
   const header = document.createElement("div");
@@ -69,18 +415,22 @@ function renderStats(panel, data, gameCount) {
       <div class="cpbl-rfv-eyebrow">CPBL Recent Form</div>
       <div class="cpbl-rfv-title">近期 ${gameCount} 場表現</div>
     </div>
-    <div class="cpbl-rfv-meta">
-      <span>${escapeHtml(data.playerTypeLabel)}</span>
-      <span>一軍例行賽</span>
-      <span>${escapeHtml(data.dateRange)}</span>
+    <div class="cpbl-rfv-toolbar">
+      <div class="cpbl-rfv-meta">
+        <span>${escapeHtml(data.playerTypeLabel)}</span>
+        <span>一軍例行賽</span>
+        <span>${escapeHtml(data.dateRange)}</span>
+      </div>
+      ${renderGameCountControl(gameCount, PLAYER_GAME_COUNT_OPTIONS)}
     </div>
   `;
   panel.appendChild(header);
+  attachGameCountControl(header, onGameCountChange);
 
   if (data.games.length === 0) {
     const message = document.createElement("div");
     message.className = "cpbl-rfv-message";
-    message.textContent = "近期沒有可計算的出賽資料。可以在 popup 調整近期場數後重新整理頁面。";
+    message.textContent = "近期沒有可計算的出賽資料。可以直接調整上方場數再查看。";
     panel.appendChild(message);
     return;
   }
@@ -305,6 +655,42 @@ async function getSettings() {
   return { gameCount };
 }
 
+async function saveGameCount(gameCount) {
+  await chrome.storage.sync.set({ gameCount });
+}
+
+function normalizeCountForOptions(gameCount, options, fallback) {
+  return options.includes(gameCount) ? gameCount : fallback;
+}
+
+function renderGameCountControl(gameCount, options) {
+  return `
+    <div class="cpbl-rfv-count-control" role="group" aria-label="近期場數">
+      <span class="cpbl-rfv-count-label">近況場數</span>
+      <div class="cpbl-rfv-count-options">
+        ${options.map((option) => `
+          <button
+            type="button"
+            class="cpbl-rfv-count-button${option === gameCount ? " is-active" : ""}"
+            data-game-count="${option}"
+            aria-pressed="${option === gameCount ? "true" : "false"}"
+          >${option}</button>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function attachGameCountControl(root, onGameCountChange) {
+  root.querySelectorAll("[data-game-count]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const gameCount = Number(button.dataset.gameCount);
+      if (!Number.isFinite(gameCount) || button.classList.contains("is-active")) return;
+      onGameCountChange?.(gameCount);
+    });
+  });
+}
+
 function extractPageContext() {
   const text = document.body.textContent || "";
   const scriptText = Array.from(document.scripts).map((script) => script.textContent || "").join("\n");
@@ -401,7 +787,9 @@ function buildRecentData(rows, context, gameCount) {
       dateRange: formatDateRange(gamesWithRest),
       summary: summarizePitcher(gamesWithRest),
       metrics: calculatePitcherMetrics(gamesWithRest),
-      games: gamesWithRest
+      games: gamesWithRest,
+      sourceRows: sortedRows,
+      sourceContext: context
     };
   }
 
@@ -411,7 +799,9 @@ function buildRecentData(rows, context, gameCount) {
     dateRange: formatDateRange(games),
     summary: summarizeBatter(games),
     metrics: calculateBatterMetrics(games),
-    games
+    games,
+    sourceRows: sortedRows,
+    sourceContext: context
   };
 }
 
@@ -567,6 +957,14 @@ function formatDate(value) {
   return `${year}/${month}/${day}`;
 }
 
+function shortDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value ?? "-");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}/${day}`;
+}
+
 function formatDateRange(games) {
   if (games.length === 0) return "無近期資料";
   const dates = games.map((game) => new Date(game.GameDate)).filter((date) => !Number.isNaN(date.getTime()));
@@ -600,6 +998,14 @@ function clampNumber(value, min, max, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function normalizeText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function escapeHtml(value) {
