@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "CPBL Recent Form Visualizer",
+  "description": "在 CPBL 官網球員頁與逐場成績頁上方顯示球員近期表現。",
+  "version": "0.1.0",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://cpbl.com.tw/*",
+    "https://www.cpbl.com.tw/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://cpbl.com.tw/team/person*",
+        "https://www.cpbl.com.tw/team/person*",
+        "https://cpbl.com.tw/team/follow*",
+        "https://www.cpbl.com.tw/team/follow*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "css": [
+        "src/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "CPBL Recent Form",
+    "default_popup": "popup/popup.html"
+  }
+}
