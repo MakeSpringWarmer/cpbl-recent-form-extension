@@ -1,6 +1,6 @@
 # Chrome Web Store Listing - CPBL Recent Form Visualizer
 
-> Last Updated: 2026-06-27
+> Last Updated: 2026-06-28
 
 ## Store Listing
 
@@ -16,7 +16,7 @@ CPBL Recent Form Visualizer
 
 瀏覽 CPBL 官網時，直接在原有頁面查看球員與球隊的近期表現。
 
-打者顯示 AVG、OBP、SLG 與 OPS；投手顯示 ERA、WHIP、局數、平均用球與登板月曆；球隊逐日戰績頁顯示近期勝敗、得失分、主場戰績與賽果走勢。近期場數可以直接在面板上調整。
+打者顯示 AVG、OBP、SLG 與 OPS；投手顯示 ERA、WHIP、每場局數、平均用球與登板月曆。每項近期指標都會以中央基準差異刻度呈現相對本季或生涯較佳、較差、較多或較少。球隊逐日戰績頁顯示近期勝敗、得失分、場均得失分與賽果走勢，近期場數可直接在面板上調整。
 
 安裝後開啟支援的 CPBL 球員頁或球隊逐日戰績頁，近期表現面板會自動出現在官方內容上方。
 
@@ -41,14 +41,14 @@ Chinese (Traditional)
 | Asset | Dimensions | Status | Filename |
 |-------|-----------|--------|----------|
 | Store Icon | 128x128 PNG | Not created | |
-| Screenshot 1 | 1280x800 or 640x400 | Needs update | Player Form |
+| Screenshot 1 | 1280x800 or 640x400 | Needs update | Player benchmark comparisons |
 | Screenshot 2 | 1280x800 or 640x400 | Needs update | Pitcher calendar |
 | Screenshot 3 | 1280x800 or 640x400 | Needs update | Team Form |
 | Small Promo Tile | 440x280 | Not created | |
 
 ### Screenshot Notes
 
-截圖需分別呈現打者指標、投手登板月曆與球隊近期賽果，並包含頁面內的場數控制。
+截圖需分別呈現球員相對本季／生涯的中央基準差異刻度、投手登板月曆與球隊近期賽果，並包含頁面內的場數控制。
 
 ## Permissions Justification
 
@@ -98,7 +98,7 @@ TODO: publish `PRIVACY.md` at a publicly accessible URL before submission.
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
-| 0.1.0 | 2026-06-27 | Initial player and team recent-form release. | Draft |
+| 0.1.0 | 2026-06-28 | Initial release with centered benchmark comparisons against season and career performance. | Draft |
 
 ## Review Notes
 

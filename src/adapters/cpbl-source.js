@@ -28,25 +28,36 @@
     const cacheKey = `follow:${acnt}:A:${pageContext.year}:${pageContext.defendStation}`;
     const cached = await cache.get(cacheKey);
     const cachedEntry = cached && cached[cacheKey];
-    if (cachedEntry && now - cachedEntry.updatedAt < CACHE_TTL_MS) {
-      const context = cachedEntry.context || pageContext;
-      return normalizePlayerSource(cachedEntry.rows, context);
+    const cacheIsFresh = cachedEntry && now - cachedEntry.updatedAt < CACHE_TTL_MS;
+    let context = cacheIsFresh ? cachedEntry.context || pageContext : null;
+    let rows = cacheIsFresh ? cachedEntry.rows : null;
+    let career = cacheIsFresh && Object.hasOwn(cachedEntry, "career") ? cachedEntry.career : undefined;
+
+    if (!rows || !context) {
+      const followPage = await fetchText(fetcher, `/team/follow?Acnt=${encodeURIComponent(acnt)}`, {
+        credentials: "include"
+      }, "follow page");
+      const token = extractFollowToken(followPage);
+      context = {
+        defendStation: matchFirst(followPage, /defendStation:\s*'([^']+)'/) || pageContext.defendStation,
+        year: matchFirst(followPage, /year:\s*'(\d{4})'/) || pageContext.year,
+        isPitcher: pageContext.isPitcher
+      };
+      context.isPitcher = context.defendStation.includes("投手") || context.isPitcher;
+      rows = await fetchPlayerRows(fetcher, location, acnt, token, context);
     }
 
-    const followPage = await fetchText(fetcher, `/team/follow?Acnt=${encodeURIComponent(acnt)}`, {
-      credentials: "include"
-    }, "follow page");
-    const token = extractFollowToken(followPage);
-    const context = {
-      defendStation: matchFirst(followPage, /defendStation:\s*'([^']+)'/) || pageContext.defendStation,
-      year: matchFirst(followPage, /year:\s*'(\d{4})'/) || pageContext.year,
-      isPitcher: pageContext.isPitcher
-    };
-    context.isPitcher = context.defendStation.includes("投手") || context.isPitcher;
+    if (career === undefined) {
+      try {
+        career = await fetchPlayerCareer(fetcher, location, acnt, context);
+      } catch (error) {
+        career = null;
+        console.debug("[CPBL RFV] career data unavailable", error);
+      }
+    }
 
-    const rows = await fetchPlayerRows(fetcher, location, acnt, token, context);
-    await cache.set({ [cacheKey]: { rows, context, updatedAt: now } });
-    return normalizePlayerSource(rows, context);
+    await cache.set({ [cacheKey]: { rows, context, career, updatedAt: now } });
+    return normalizePlayerSource(rows, context, career);
   }
 
   async function loadTeamSource(document, wait = defaultWait) {
@@ -84,6 +95,32 @@
     return JSON.parse(result.FollowScore || "[]");
   }
 
+  async function fetchPlayerCareer(fetcher, location, acnt, context) {
+    const personPage = await fetchText(fetcher, `/team/person?Acnt=${encodeURIComponent(acnt)}`, {
+      credentials: "include"
+    }, "person page");
+    const isPitcher = context.isPitcher || context.defendStation.includes("投手");
+    const endpoint = isPitcher ? "/team/getpitchcareerscore" : "/team/getbattingcareerscore";
+    const resultKey = isPitcher ? "PitchCareerScore" : "BattingCareerScore";
+    const token = extractEndpointToken(personPage, endpoint);
+    const response = await fetcher(endpoint, {
+      method: "POST",
+      credentials: "include",
+      referrer: `${location.origin}/team/person?Acnt=${encodeURIComponent(acnt)}`,
+      headers: {
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "RequestVerificationToken": token,
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: new URLSearchParams({ acnt, kindCode: "A" })
+    });
+    if (!response.ok) throw new Error(`career score ${response.status}`);
+    const result = await response.json();
+    if (!result.Success) throw new Error("career score unsuccessful");
+    return JSON.parse(result[resultKey] || "[]")[0] || null;
+  }
+
   async function fetchText(fetcher, url, options, label) {
     const response = await fetcher(url, options);
     if (!response.ok) throw new Error(`${label} ${response.status}`);
@@ -109,12 +146,46 @@
     return token;
   }
 
-  function normalizePlayerSource(rows, context) {
+  function extractEndpointToken(html, endpoint) {
+    const escapedEndpoint = endpoint.replaceAll("/", "\\/");
+    const pattern = new RegExp(`url:\\s*["']${escapedEndpoint}["'][\\s\\S]*?RequestVerificationToken:\\s*'([^']+)'`);
+    const token = matchFirst(html, pattern);
+    if (!token) throw new Error(`missing token for ${endpoint}`);
+    return token;
+  }
+
+  function normalizePlayerSource(rows, context, careerRow = null) {
     const playerType = context.isPitcher || context.defendStation.includes("投手") ? "pitcher" : "batter";
     return {
       kind: "player",
       playerType,
+      seasonYear: context.year,
+      career: normalizeCareer(careerRow, playerType),
       games: (Array.isArray(rows) ? rows : []).map((row) => normalizePlayerGame(row, playerType)).filter(Boolean)
+    };
+  }
+
+  function normalizeCareer(row, playerType) {
+    if (!row) return null;
+    if (playerType === "pitcher") {
+      return {
+        appearances: number(row.TotalGames),
+        inningsOuts: aggregateInningsToOuts(row),
+        pitches: number(row.PitchCnt),
+        hitsAllowed: number(row.HittingCnt),
+        earnedRuns: number(row.EarnedRunCnt),
+        walks: number(row.BasesONBallsCnt)
+      };
+    }
+    return {
+      appearances: number(row.TotalGames),
+      atBats: number(row.HitCnt),
+      hits: number(row.HittingCnt),
+      homeRuns: number(row.HomeRunCnt),
+      walks: number(row.BasesONBallsCnt),
+      hitByPitch: number(row.HitBYPitchCnt),
+      sacrificeFlies: number(row.SacrificeFlyCnt),
+      totalBases: number(row.TotalBases)
     };
   }
 
@@ -230,6 +301,13 @@
   function inningsToOuts(value) {
     const [whole, partial = "0"] = String(value ?? "0").split(".");
     return (Number.parseInt(whole, 10) || 0) * 3 + (Number.parseInt(partial, 10) || 0);
+  }
+
+  function aggregateInningsToOuts(row) {
+    if (row.InningPitchedDiv3 !== undefined && row.InningPitchedDiv3 !== null) {
+      return Math.floor(number(row.InningPitched)) * 3 + number(row.InningPitchedDiv3);
+    }
+    return inningsToOuts(row.InningPitched);
   }
 
   function number(value) {

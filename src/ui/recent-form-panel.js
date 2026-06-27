@@ -6,7 +6,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createRecentFormPanel() {
   const PANEL_ID = "cpbl-rfv-panel";
 
-  function mount({ document, mode, countOptions, onCountChange }) {
+  function mount({ document, mode, countOptions, onCountChange, onBaselineChange }) {
     if (document.getElementById(PANEL_ID)) return null;
     const mountPoint = findMountPoint(document, mode);
     if (!mountPoint) return null;
@@ -28,7 +28,7 @@
           return;
         }
         if (state.status === "ready") {
-          renderReady(panel, state.data, countOptions, onCountChange);
+          renderReady(panel, state.data, countOptions, onCountChange, onBaselineChange);
           return;
         }
         throw new TypeError(`unknown panel status: ${state.status}`);
@@ -59,8 +59,8 @@
     header.className = "cpbl-rfv-header";
     header.innerHTML = `
       <div>
-        <div class="cpbl-rfv-eyebrow">${mode === "team" ? "CPBL Team Form" : "CPBL Recent Form"}</div>
-        <div class="cpbl-rfv-title">${mode === "team" ? "球隊近況" : "近期表現"}</div>
+        <div class="cpbl-rfv-eyebrow">${mode === "team" ? "CPBL Team Form" : "CPBL Player Form"}</div>
+        <div class="cpbl-rfv-title">${mode === "team" ? "球隊近況" : "球員表現"}</div>
       </div>
       <div class="cpbl-rfv-subtitle">資料來源：CPBL 官網</div>
     `;
@@ -70,27 +70,33 @@
     panel.append(header, message);
   }
 
-  function renderReady(panel, data, countOptions, onCountChange) {
+  function renderReady(panel, data, countOptions, onCountChange, onBaselineChange) {
     const document = panel.ownerDocument;
     panel.innerHTML = "";
     const header = renderHeader(document, data, countOptions);
     panel.appendChild(header);
-    attachCountControl(header, onCountChange);
+    if (data.kind === "team") attachCountControl(header, onCountChange);
+    else {
+      const scopeBar = renderScopeBar(document, data, countOptions);
+      panel.appendChild(scopeBar);
+      attachCountControl(scopeBar, onCountChange);
+      attachBaselineControl(scopeBar, onBaselineChange);
+    }
 
-    if (data.games.length === 0) {
+    if (!data.hasData) {
       const message = document.createElement("div");
       message.className = "cpbl-rfv-message";
-      message.textContent = data.kind === "team"
+      message.textContent = data.emptyMessage || (data.kind === "team"
         ? "目前沒有可計算的近期比賽。"
-        : "近期沒有可計算的出賽資料。可以直接調整上方場數再查看。";
+        : "近期沒有可計算的出賽資料。可以直接調整上方場數再查看。");
       panel.appendChild(message);
       return;
     }
 
-    panel.appendChild(renderSummary(document, data.summary, data.kind));
-    panel.appendChild(renderMetrics(document, data.metrics));
+    panel.appendChild(renderSummary(document, data));
+    panel.appendChild(renderMetrics(document, data.metrics, data));
     if (data.kind === "team") renderTeamDetails(panel, data);
-    else renderPlayerDetails(panel, data);
+    else if (data.showDetails) renderPlayerDetails(panel, data);
   }
 
   function renderHeader(document, data, countOptions) {
@@ -99,48 +105,128 @@
     const isTeam = data.kind === "team";
     header.innerHTML = `
       <div>
-        <div class="cpbl-rfv-eyebrow">${isTeam ? "CPBL Team Form" : "CPBL Recent Form"}</div>
-        <div class="cpbl-rfv-title">${isTeam ? `${escapeHtml(data.teamName)} 近 ${data.games.length} 場` : `近期 ${data.count} 場表現`}</div>
+        <div class="cpbl-rfv-eyebrow">${isTeam ? "CPBL Team Form" : "CPBL Player Form"}</div>
+        <div class="cpbl-rfv-title">${isTeam ? `${escapeHtml(data.teamName)} 近 ${data.games.length} 場` : escapeHtml(data.title)}</div>
       </div>
       <div class="cpbl-rfv-toolbar">
         <div class="cpbl-rfv-meta">
-          ${isTeam ? "" : `<span>${escapeHtml(data.playerTypeLabel)}</span><span>一軍例行賽</span>`}
-          <span>${escapeHtml(data.dateRange)}</span>
-          ${isTeam ? "<span>逐日戰績</span>" : ""}
+          ${isTeam
+            ? `<span>${escapeHtml(data.dateRange)}</span><span>逐日戰績</span>`
+            : `<span>${escapeHtml(data.playerTypeLabel)}</span><span>一軍例行賽</span>`}
         </div>
-        ${renderCountControl(data.count, countOptions)}
+        ${isTeam ? renderCountControl(data.count, countOptions) : ""}
       </div>
     `;
     return header;
   }
 
-  function renderSummary(document, summaryText, kind) {
+  function renderScopeBar(document, data, countOptions) {
+    const scopeBar = document.createElement("div");
+    scopeBar.className = "cpbl-rfv-scope-bar";
+    scopeBar.innerHTML = `
+      <div class="cpbl-rfv-baseline-control" role="group" aria-label="比較基準">
+        <span class="cpbl-rfv-baseline-label">比較基準</span>
+        <div class="cpbl-rfv-baseline-options">
+          ${data.baselineOptions.map((baseline) => `
+            <button
+              type="button"
+              class="cpbl-rfv-baseline-button${baseline.value === data.baseline ? " is-active" : ""}"
+              data-baseline="${escapeHtml(baseline.value)}"
+              aria-pressed="${baseline.value === data.baseline}"
+              ${baseline.available ? "" : 'disabled title="生涯資料暫時無法取得"'}
+            >${escapeHtml(baseline.label)}</button>
+          `).join("")}
+        </div>
+      </div>
+      <div class="cpbl-rfv-scope-actions">
+        <div class="cpbl-rfv-range-stamp">${escapeHtml(data.dateRange)}</div>
+        ${renderCountControl(data.count, countOptions)}
+      </div>
+    `;
+    return scopeBar;
+  }
+
+  function renderSummary(document, data) {
     const summary = document.createElement("div");
     summary.className = "cpbl-rfv-summary";
     summary.innerHTML = `
-      <div class="cpbl-rfv-summary-label">${kind === "team" ? "球隊速記" : "球探速記"}</div>
-      <div class="cpbl-rfv-summary-text">${escapeHtml(summaryText)}</div>
+      <div class="cpbl-rfv-summary-label">${data.kind === "team" ? "球隊速記" : "球探速記"}</div>
+      <div class="cpbl-rfv-summary-content">
+        ${data.comparisonSummary ? `<div class="cpbl-rfv-summary-insight">${escapeHtml(data.comparisonSummary)}</div>` : ""}
+        <div class="cpbl-rfv-summary-text">${escapeHtml(data.summary)}</div>
+      </div>
     `;
     return summary;
   }
 
-  function renderMetrics(document, metrics) {
+  function renderMetrics(document, metrics, data) {
     const body = document.createElement("div");
     body.className = "cpbl-rfv-body";
     const grid = document.createElement("div");
-    grid.className = "cpbl-rfv-grid";
-    metrics.forEach((metric) => {
-      const card = document.createElement("div");
-      card.className = "cpbl-rfv-card";
-      card.innerHTML = `
+    grid.className = `cpbl-rfv-grid${data.kind === "player" ? " is-player-comparison" : ""}`;
+    metrics.forEach((metric) => grid.appendChild(renderMetricCard(document, metric, data)));
+    body.appendChild(grid);
+    return body;
+  }
+
+  function renderMetricCard(document, metric, data) {
+    const card = document.createElement("div");
+    const comparison = data.kind === "player" ? metric.comparison : null;
+    card.className = `cpbl-rfv-card${comparison ? ` is-${escapeHtml(comparison.tone)}` : ""}`;
+    card.innerHTML = comparison
+      ? renderBenchmarkCard(metric, comparison, data.count)
+      : `
         <div class="cpbl-rfv-label">${escapeHtml(metric.label)}</div>
         <div class="cpbl-rfv-value">${escapeHtml(metric.value)}</div>
         <div class="cpbl-rfv-note">${escapeHtml(metric.note)}</div>
       `;
-      grid.appendChild(card);
-    });
-    body.appendChild(grid);
-    return body;
+    return card;
+  }
+
+  function renderBenchmarkCard(metric, comparison, count) {
+    const position = Math.min(90, Math.max(10, Number(comparison.position) || 50));
+    const deltaStart = Math.min(position, 50);
+    const deltaWidth = Math.abs(position - 50);
+    const direction = comparisonDirection(comparison, position);
+    const description = `${metric.label}，${comparison.baselineText}，近 ${count} 場 ${metric.value}，${comparison.label}`;
+    return `
+      <div class="cpbl-rfv-card-heading">
+        <div class="cpbl-rfv-label">${escapeHtml(metric.label)}</div>
+        <div class="cpbl-rfv-compare-status"><span aria-hidden="true">${direction}</span>${escapeHtml(comparison.label)}</div>
+      </div>
+      <div class="cpbl-rfv-current-value">
+        <span>近 ${escapeHtml(count)} 場</span>
+        <strong>${escapeHtml(metric.value)}</strong>
+      </div>
+      <div
+        class="cpbl-rfv-benchmark"
+        style="--rfv-marker-x: ${position}%; --rfv-delta-start: ${deltaStart}%; --rfv-delta-width: ${deltaWidth}%"
+        role="img"
+        aria-label="${escapeHtml(description)}"
+      >
+        <div class="cpbl-rfv-benchmark-track" aria-hidden="true">
+          <span class="cpbl-rfv-benchmark-delta"></span>
+          <span class="cpbl-rfv-benchmark-baseline"></span>
+          <span class="cpbl-rfv-benchmark-marker"></span>
+        </div>
+        <div class="cpbl-rfv-benchmark-labels" aria-hidden="true">
+          <span>${escapeHtml(comparison.lowLabel)}</span>
+          <span class="cpbl-rfv-benchmark-reference">${escapeHtml(comparison.baselineLabel)} <strong>${escapeHtml(comparison.baselineValue)}</strong></span>
+          <span>${escapeHtml(comparison.highLabel)}</span>
+        </div>
+      </div>
+      <div class="cpbl-rfv-note">${escapeHtml(metric.note)}</div>
+    `;
+  }
+
+  function comparisonDirection(comparison, position) {
+    if (comparison.tone === "unavailable") return "·";
+    if (comparison.tone === "even") return "=";
+    if (comparison.tone === "positive") return "↑";
+    if (comparison.tone === "negative") return "↓";
+    if (position > 50) return "↑";
+    if (position < 50) return "↓";
+    return "→";
   }
 
   function renderTeamDetails(panel, data) {
@@ -314,6 +400,20 @@
           await onCountChange(count);
         } catch (error) {
           console.debug("[CPBL RFV] unable to change game count", error);
+        }
+      });
+    });
+  }
+
+  function attachBaselineControl(root, onBaselineChange) {
+    root.querySelectorAll("[data-baseline]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const baseline = button.dataset.baseline;
+        if (!baseline || button.disabled || button.classList.contains("is-active")) return;
+        try {
+          await onBaselineChange(baseline);
+        } catch (error) {
+          console.debug("[CPBL RFV] unable to change comparison baseline", error);
         }
       });
     });

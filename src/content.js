@@ -8,6 +8,7 @@
   const mode = location.pathname.toLowerCase() === "/team/dailyrecord" ? "team" : "player";
   let source = null;
   let currentCount = null;
+  let currentBaseline = "season";
   let panel = null;
 
   try {
@@ -19,6 +20,10 @@
       countOptions: settings.options,
       async onCountChange(nextCount) {
         currentCount = await GameCount.save(mode, nextCount, chrome.storage.sync);
+        render();
+      },
+      async onBaselineChange(nextBaseline) {
+        currentBaseline = nextBaseline;
         render();
       }
     });
@@ -45,7 +50,7 @@
     if (!source || !panel) return;
     panel.update({
       status: "ready",
-      data: RecentForm.build(source, { count: currentCount, now: new Date() })
+      data: RecentForm.build(source, { count: currentCount, baseline: currentBaseline, now: new Date() })
     });
   }
 })();

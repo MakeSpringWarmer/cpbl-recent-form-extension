@@ -23,3 +23,7 @@
 ## Game Count
 
 使用者選擇的 Recent Form 場數。Player Form 與 Team Form 各自保存選擇。
+
+## Comparison Baseline
+
+Player Form 用來判斷 Recent Form 相對高低的基準，可選 Season 或 Career。效能指標標示較佳或較差；投球工作量只標示較多或較少。

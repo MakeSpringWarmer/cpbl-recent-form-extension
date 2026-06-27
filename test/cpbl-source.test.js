@@ -9,14 +9,29 @@ test("player adapter hides fetch, token and official field names", async () => {
     if (url.startsWith("/team/follow")) {
       return response({ text: "getFollowScore RequestVerificationToken: 'token-123' defendStation: '內野手' year: '2026'" });
     }
-    return response({ json: { Success: true, FollowScore: JSON.stringify([{
-      GameDate: "2026/6/27",
-      FightTeamAbbrName: "兄弟",
-      AtBatCnt: "4",
-      HittingCnt: "2",
-      TwoBaseHitCnt: "1",
-      HomeRunCnt: "0",
-      BasesONBallsCnt: "1"
+    if (url === "/team/getfollowscore") {
+      return response({ json: { Success: true, FollowScore: JSON.stringify([{
+        GameDate: "2026/6/27",
+        FightTeamAbbrName: "兄弟",
+        AtBatCnt: "4",
+        HittingCnt: "2",
+        TwoBaseHitCnt: "1",
+        HomeRunCnt: "0",
+        BasesONBallsCnt: "1"
+      }]) } });
+    }
+    if (url.startsWith("/team/person")) {
+      return response({ text: 'url: "/team/getbattingcareerscore", headers: { RequestVerificationToken: \'career-token\' }' });
+    }
+    return response({ json: { Success: true, BattingCareerScore: JSON.stringify([{
+      TotalGames: 600,
+      HitCnt: 2100,
+      HittingCnt: 700,
+      HomeRunCnt: 100,
+      BasesONBallsCnt: 250,
+      HitBYPitchCnt: 20,
+      SacrificeFlyCnt: 30,
+      TotalBases: 1120
     }]) } });
   };
   const cache = memoryStorage();
@@ -32,6 +47,9 @@ test("player adapter hides fetch, token and official field names", async () => {
 
   assert.equal(source.kind, "player");
   assert.equal(source.playerType, "batter");
+  assert.equal(source.seasonYear, "2026");
+  assert.equal(source.career.appearances, 600);
+  assert.equal(source.career.atBats, 2100);
   assert.deepEqual(source.games[0], {
     date: "2026/06/27",
     opponent: "兄弟",
@@ -44,8 +62,9 @@ test("player adapter hides fetch, token and official field names", async () => {
     sacrificeFlies: 0,
     totalBases: 3
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
   assert.equal(calls[1].options.headers.RequestVerificationToken, "token-123");
+  assert.equal(calls[3].options.headers.RequestVerificationToken, "career-token");
 });
 
 test("player adapter reuses a fresh cache entry", async () => {
@@ -53,6 +72,7 @@ test("player adapter reuses a fresh cache entry", async () => {
     "follow:42:A:2026:投手": {
       updatedAt: new Date(2026, 5, 27).getTime(),
       context: { year: "2026", defendStation: "投手", isPitcher: true },
+      career: { TotalGames: 80, InningPitched: 120, InningPitchedDiv3: 2, PitchCnt: 1900 },
       rows: [{ GameDate: "2026/06/26", InningPitchedCnt: "1.2", PitchCnt: "24" }]
     }
   });
@@ -67,6 +87,8 @@ test("player adapter reuses a fresh cache entry", async () => {
   assert.equal(source.playerType, "pitcher");
   assert.equal(source.games[0].inningsOuts, 5);
   assert.equal(source.games[0].pitches, 24);
+  assert.equal(source.career.inningsOuts, 362);
+  assert.equal(source.career.appearances, 80);
 });
 
 test("team adapter hides table positions and normalizes the result", async () => {
