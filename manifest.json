@@ -21,6 +21,10 @@
         "https://www.cpbl.com.tw/team/dailyrecord*"
       ],
       "js": [
+        "src/core/recent-form.js",
+        "src/adapters/cpbl-source.js",
+        "src/ui/recent-form-panel.js",
+        "src/settings/game-count.js",
         "src/content.js"
       ],
       "css": [
@@ -28,9 +32,5 @@
       ],
       "run_at": "document_idle"
     }
-  ],
-  "action": {
-    "default_title": "CPBL Recent Form",
-    "default_popup": "popup/popup.html"
-  }
+  ]
 }
