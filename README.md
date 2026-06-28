@@ -6,10 +6,11 @@
 
 - 在 `cpbl.com.tw/team/person?Acnt=...` 球員頁與 `cpbl.com.tw/team/follow?Acnt=...` 逐場成績頁的表格上方插入「近期表現」面板。
 - 球員預設取最近 5 場，球隊預設取最近 10 場；場數可直接在頁面面板調整。
-- 球員近期指標可選擇「本季」或「生涯」為比較基準，以中央基準差異刻度呈現相對較佳或較差。
+- 球員預設使用「近況」顯示近期指標，也可切換「比較本季」或「比較生涯」。
 - 打者顯示 `AVG`、`OBP`、`SLG`、`OPS`。
 - 投手顯示 `ERA`、`WHIP`、總局數、平均用球，並列出近幾場用球數與登板間隔。
-- 在球隊逐日戰績頁顯示勝敗、得失分、場均得失分與近期賽果。
+- 球員整季趨勢圖依所選場數計算移動平均；打者呈現 `AVG`、`OPS`，投手呈現 `ERA`、`WHIP`，並以虛線標示本季平均。
+- 在球隊逐日戰績頁比較近況與本季勝率、場均得失分及場均分差，以整季移動平均折線搭配近期逐場攻守資料點呈現走勢。
 - 資料只取自 CPBL 官網公開頁面與官方逐場成績 endpoint，並在本機快取 6 小時。
 
 ## 架構
@@ -20,6 +21,7 @@ src/adapters/cpbl-source.js       Player Source / Team Source adapters
 src/core/recent-form.js           Recent Form 計算與日期政策
 src/ui/recent-form-panel.js       面板 mount、狀態與 rendering
 src/settings/game-count.js        Player / Team 場數政策
+src/settings/comparison-mode.js   Player 指標顯示偏好
 src/content.css                   注入頁面的視覺樣式
 ```
 

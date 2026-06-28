@@ -35,7 +35,7 @@ test("player adapter hides fetch, token and official field names", async () => {
     }]) } });
   };
   const cache = memoryStorage();
-  const document = fakePlayerDocument("defendStation: '內野手'; year: '2026'");
+  const document = fakePlayerDocument("defendStation: '內野手'; year: '2026'", "打擊成績 投球成績");
 
   const source = await CpblSource.load({
     document,
@@ -65,6 +65,28 @@ test("player adapter hides fetch, token and official field names", async () => {
   assert.equal(calls.length, 4);
   assert.equal(calls[1].options.headers.RequestVerificationToken, "token-123");
   assert.equal(calls[3].options.headers.RequestVerificationToken, "career-token");
+});
+
+test("explicit fielder position corrects a stale pitcher classification", async () => {
+  const cache = memoryStorage({
+    "follow:42:A:2026:內野手": {
+      updatedAt: new Date(2026, 5, 27).getTime(),
+      context: { year: "2026", defendStation: "內野手", isPitcher: true },
+      career: null,
+      rows: [{ GameDate: "2026/06/26", AtBatCnt: "4", HittingCnt: "2" }]
+    }
+  });
+  const source = await CpblSource.load({
+    document: fakePlayerDocument("defendStation: '內野手'; year: '2026'", "投球成績"),
+    location: { pathname: "/team/follow", href: "https://cpbl.com.tw/team/follow?Acnt=42", origin: "https://cpbl.com.tw" },
+    fetch: async () => { throw new Error("fetch should not run"); },
+    cache,
+    now: new Date(2026, 5, 27).getTime()
+  });
+
+  assert.equal(source.playerType, "batter");
+  assert.equal(source.games[0].atBats, 4);
+  assert.equal(source.games[0].hits, 2);
 });
 
 test("player adapter reuses a fresh cache entry", async () => {

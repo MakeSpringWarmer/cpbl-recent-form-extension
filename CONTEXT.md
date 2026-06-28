@@ -6,11 +6,11 @@
 
 ## Player Form
 
-球員的 Recent Form。打者使用 AVG、OBP、SLG、OPS；投手使用 ERA、WHIP、局數、用球數與登板日期。
+球員的 Recent Form。打者使用 AVG、OBP、SLG、OPS；投手使用 ERA、WHIP、局數、用球數與登板日期。整季趨勢依 Game Count 計算移動平均，打者追蹤 AVG、OPS，投手追蹤 ERA、WHIP，並與本季平均並列。
 
 ## Team Form
 
-球隊逐日戰績的 Recent Form，包含勝敗、得失分、主場戰績、連勝敗與近期賽果。
+球隊逐日戰績的 Recent Form，包含近期與本季比較、逐場資料點、移動勝率、攻守走勢、連勝敗與近期賽果。
 
 ## Player Source
 
@@ -26,4 +26,4 @@
 
 ## Comparison Baseline
 
-Player Form 用來判斷 Recent Form 相對高低的基準，可選 Season 或 Career。效能指標標示較佳或較差；投球工作量只標示較多或較少。
+Player Form 預設使用「近況」，不套用比較基準；使用者也可選「比較本季」或「比較生涯」。效能指標標示較佳或較差；投球工作量只標示較多或較少。

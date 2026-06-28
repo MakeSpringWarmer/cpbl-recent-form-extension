@@ -154,7 +154,7 @@
 
 .cpbl-rfv-baseline-options {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(58px, 1fr));
+  grid-template-columns: repeat(3, minmax(58px, 1fr));
   border: 1px solid #d6dee8;
   border-radius: 6px;
   background: var(--rfv-soft);
@@ -720,6 +720,222 @@
   color: #64748b;
 }
 
+.cpbl-rfv-trends {
+  border-top: 1px solid var(--rfv-line);
+  background: #fff;
+  padding: 14px 16px 16px;
+}
+
+.cpbl-rfv-trends-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.cpbl-rfv-trends-title {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.cpbl-rfv-trends-caption,
+.cpbl-rfv-trends-meta {
+  color: var(--rfv-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.cpbl-rfv-trends-caption {
+  margin-top: 2px;
+}
+
+.cpbl-rfv-trends-meta {
+  white-space: nowrap;
+}
+
+.cpbl-rfv-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cpbl-rfv-trend-card {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 11px 12px 9px;
+}
+
+.cpbl-rfv-trend-card figcaption {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.cpbl-rfv-trend-card figcaption > strong {
+  color: var(--rfv-ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.cpbl-rfv-trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px 10px;
+}
+
+.cpbl-rfv-trend-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #526170;
+  font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cpbl-rfv-trend-key::before {
+  content: "";
+  width: 14px;
+  border-top: 2px solid #315a7d;
+}
+
+.cpbl-rfv-trend-key.is-season::before,
+.cpbl-rfv-trend-key.is-allowed::before {
+  border-top-style: dashed;
+}
+
+.cpbl-rfv-trend-key.is-season::before {
+  border-top-color: #697887;
+}
+
+.cpbl-rfv-trend-key.is-scored::before {
+  border-top-color: #39766d;
+}
+
+.cpbl-rfv-trend-key.is-allowed::before {
+  border-top-color: #a25b52;
+}
+
+.cpbl-rfv-trend-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 4px;
+  overflow: visible;
+}
+
+.cpbl-rfv-trend-highlight {
+  fill: #edf3f8;
+}
+
+.cpbl-rfv-trend-gridline {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-baseline {
+  stroke: #697887;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-line {
+  fill: none;
+  stroke: #315a7d;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-line.is-scored {
+  stroke: #39766d;
+}
+
+.cpbl-rfv-trend-line.is-allowed {
+  stroke: #a25b52;
+  stroke-dasharray: 6 4;
+}
+
+.cpbl-rfv-trend-observation {
+  fill: #697887;
+  stroke: #fff;
+  stroke-width: 1;
+  opacity: 0.22;
+  cursor: help;
+  vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-observation.is-recent {
+  opacity: 0.72;
+}
+
+.cpbl-rfv-trend-observation.is-result-w,
+.cpbl-rfv-trend-observation.is-scored {
+  fill: #39766d;
+}
+
+.cpbl-rfv-trend-observation.is-result-l,
+.cpbl-rfv-trend-observation.is-allowed {
+  fill: #a25b52;
+}
+
+.cpbl-rfv-trend-observation.is-result-t {
+  fill: #697887;
+}
+
+.cpbl-rfv-trend-observation:hover {
+  opacity: 1;
+  stroke: #273444;
+  stroke-width: 1.5;
+}
+
+.cpbl-rfv-trend-observation.is-clipped {
+  stroke: #273444;
+  stroke-width: 1.5;
+}
+
+.cpbl-rfv-trend-point {
+  fill: #315a7d;
+  stroke: #fff;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-point.is-scored {
+  fill: #39766d;
+}
+
+.cpbl-rfv-trend-point.is-allowed {
+  fill: #a25b52;
+}
+
+.cpbl-rfv-trend-season {
+  min-height: 16px;
+  color: var(--rfv-muted);
+  font-size: 10px;
+  text-align: right;
+}
+
+.cpbl-rfv-trend-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1px;
+  color: var(--rfv-muted);
+  font-size: 10px;
+}
+
 .cpbl-rfv-strip-header {
   display: flex;
   align-items: center;
@@ -956,6 +1172,14 @@
 
   .cpbl-rfv-body {
     padding: 12px;
+  }
+
+  .cpbl-rfv-trends {
+    padding: 12px;
+  }
+
+  .cpbl-rfv-trend-grid {
+    grid-template-columns: 1fr;
   }
 
   .cpbl-rfv-calendar {

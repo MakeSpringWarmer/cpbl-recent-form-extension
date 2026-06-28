@@ -1,6 +1,6 @@
 (async function bootstrapRecentForm() {
-  const { RecentForm, CpblSource, RecentFormPanel, GameCount } = globalThis.CPBLRFV || {};
-  if (!RecentForm || !CpblSource || !RecentFormPanel || !GameCount) {
+  const { RecentForm, CpblSource, RecentFormPanel, GameCount, ComparisonMode } = globalThis.CPBLRFV || {};
+  if (!RecentForm || !CpblSource || !RecentFormPanel || !GameCount || !ComparisonMode) {
     console.debug("[CPBL RFV] modules were not loaded");
     return;
   }
@@ -8,12 +8,16 @@
   const mode = location.pathname.toLowerCase() === "/team/dailyrecord" ? "team" : "player";
   let source = null;
   let currentCount = null;
-  let currentBaseline = "season";
+  let currentBaseline = "none";
   let panel = null;
 
   try {
-    const settings = await GameCount.load(mode, chrome.storage.sync);
+    const [settings, comparisonMode] = await Promise.all([
+      GameCount.load(mode, chrome.storage.sync),
+      mode === "player" ? ComparisonMode.load(chrome.storage.sync) : Promise.resolve("none")
+    ]);
     currentCount = settings.count;
+    currentBaseline = comparisonMode;
     panel = RecentFormPanel.mount({
       document,
       mode,
@@ -23,7 +27,7 @@
         render();
       },
       async onBaselineChange(nextBaseline) {
-        currentBaseline = nextBaseline;
+        currentBaseline = await ComparisonMode.save(nextBaseline, chrome.storage.sync);
         render();
       }
     });

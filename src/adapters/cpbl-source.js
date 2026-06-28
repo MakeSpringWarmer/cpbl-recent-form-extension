@@ -29,7 +29,7 @@
     const cached = await cache.get(cacheKey);
     const cachedEntry = cached && cached[cacheKey];
     const cacheIsFresh = cachedEntry && now - cachedEntry.updatedAt < CACHE_TTL_MS;
-    let context = cacheIsFresh ? cachedEntry.context || pageContext : null;
+    let context = cacheIsFresh ? normalizePlayerContext(cachedEntry.context || pageContext) : null;
     let rows = cacheIsFresh ? cachedEntry.rows : null;
     let career = cacheIsFresh && Object.hasOwn(cachedEntry, "career") ? cachedEntry.career : undefined;
 
@@ -43,7 +43,7 @@
         year: matchFirst(followPage, /year:\s*'(\d{4})'/) || pageContext.year,
         isPitcher: pageContext.isPitcher
       };
-      context.isPitcher = context.defendStation.includes("投手") || context.isPitcher;
+      context = normalizePlayerContext(context);
       rows = await fetchPlayerRows(fetcher, location, acnt, token, context);
     }
 
@@ -133,10 +133,19 @@
     const defendStation = matchFirst(scriptText, /defendStation:\s*'([^']+)'/) ||
       document.querySelector(".PlayerBrief .pos .desc")?.textContent?.trim() || "";
     const year = matchFirst(scriptText, /year:\s*'(\d{4})'/) || String(new Date(now).getFullYear());
-    return {
+    return normalizePlayerContext({
       defendStation,
       year,
-      isPitcher: defendStation.includes("投手") || bodyText.includes("投球成績")
+      isPitcher: bodyText.includes("投球成績")
+    });
+  }
+
+  function normalizePlayerContext(context = {}) {
+    const defendStation = normalizeText(context.defendStation);
+    return {
+      ...context,
+      defendStation,
+      isPitcher: defendStation ? defendStation.includes("投手") : Boolean(context.isPitcher)
     };
   }
 

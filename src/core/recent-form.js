@@ -21,10 +21,11 @@
     const recentGames = sortedGames.slice(0, count);
     const playerType = source.playerType === "pitcher" ? "pitcher" : "batter";
     const baseline = normalizeBaseline(requestedBaseline, source);
-    const baselineLabel = baseline === "career" ? "生涯" : "本季";
+    const baselineLabel = baseline === "career" ? "生涯" : baseline === "season" ? "本季" : "";
     const baselineOptions = [
-      { value: "season", label: "本季", available: true },
-      { value: "career", label: "生涯", available: Boolean(source.career) }
+      { value: "none", label: "近況", available: true },
+      { value: "season", label: "比較本季", available: true },
+      { value: "career", label: "比較生涯", available: Boolean(source.career) }
     ];
     const common = {
       kind: "player",
@@ -33,21 +34,32 @@
       baseline,
       baselineLabel,
       baselineOptions,
-      title: `近期 ${count} 場 vs ${baselineLabel}`,
+      title: baseline === "none" ? `近 ${count} 場表現` : `近 ${count} 場｜比較${baselineLabel}`,
       count,
       hasData: recentGames.length > 0,
       showDetails: true,
       emptyMessage: "近期沒有可計算的出賽資料。可以直接調整上方場數再查看。",
       dateRange: formatDateRange(recentGames),
-      todayKey: dateKey(now)
+      todayKey: dateKey(now),
+      trends: playerTrends(sortedGames, count, playerType)
     };
 
     if (playerType === "pitcher") {
       const displayGames = addRestDays(recentGames, sortedGames);
       const recentTotals = pitcherTotals(displayGames);
+      const recentMetrics = pitcherMetrics(displayGames.length, recentTotals);
+      if (baseline === "none") {
+        return {
+          ...common,
+          summary: summarizePitcher(displayGames, recentTotals, `近 ${displayGames.length} 場`, displayGames.length, now),
+          comparisonSummary: "",
+          metrics: recentMetrics,
+          games: displayGames
+        };
+      }
       const baselineData = pitcherBaseline(source, sortedGames, baseline);
       const metrics = compareMetrics(
-        pitcherMetrics(displayGames.length, recentTotals),
+        recentMetrics,
         pitcherMetrics(baselineData.appearances, baselineData.totals),
         baselineLabel
       );
@@ -62,8 +74,18 @@
     }
 
     const recentTotals = batterTotals(recentGames);
+    const recentMetrics = batterMetrics(recentTotals);
+    if (baseline === "none") {
+      return {
+        ...common,
+        summary: summarizeBatter(recentTotals, `近 ${recentGames.length} 場`),
+        comparisonSummary: "",
+        metrics: recentMetrics,
+        games: recentGames
+      };
+    }
     const baselineTotals = batterBaseline(source, sortedGames, baseline);
-    const metrics = compareMetrics(batterMetrics(recentTotals), batterMetrics(baselineTotals), baselineLabel);
+    const metrics = compareMetrics(recentMetrics, batterMetrics(baselineTotals), baselineLabel);
     const comparisonSummary = summarizeComparison(metrics, baselineLabel);
     return {
       ...common,
@@ -93,19 +115,68 @@
     };
   }
 
+  function playerTrends(seasonGames, count, playerType) {
+    const chronologicalGames = seasonGames.slice().reverse();
+    const windowSize = Math.min(count, chronologicalGames.length);
+    const points = [];
+    for (let index = windowSize - 1; index < chronologicalGames.length; index += 1) {
+      const windowGames = chronologicalGames.slice(index - windowSize + 1, index + 1);
+      const metrics = playerType === "pitcher"
+        ? pitcherMetrics(windowGames.length, pitcherTotals(windowGames))
+        : batterMetrics(batterTotals(windowGames));
+      points.push(playerTrendPoint(index + 1, chronologicalGames[index], metrics, playerType));
+    }
+    const seasonMetrics = playerType === "pitcher"
+      ? pitcherMetrics(chronologicalGames.length, pitcherTotals(chronologicalGames))
+      : batterMetrics(batterTotals(chronologicalGames));
+    const seasonGameCount = chronologicalGames.length;
+    return {
+      playerType,
+      windowSize,
+      seasonGameCount,
+      recentStartGame: Math.max(1, seasonGameCount - count + 1),
+      season: playerTrendValues(seasonMetrics, playerType),
+      points
+    };
+  }
+
+  function playerTrendPoint(gameNumber, game, metrics, playerType) {
+    return {
+      gameNumber,
+      date: game.date,
+      opponent: game.opponent,
+      ...playerTrendValues(metrics, playerType)
+    };
+  }
+
+  function playerTrendValues(metrics, playerType) {
+    return playerType === "pitcher"
+      ? { era: metrics[0].rawValue, whip: metrics[1].rawValue }
+      : { avg: metrics[0].rawValue, ops: metrics[3].rawValue };
+  }
+
   function buildTeam(source, count) {
-    const games = sortNewest(source.games).slice(0, count);
+    const seasonGames = sortNewest(source.games);
+    const games = seasonGames.slice(0, count);
     const totals = teamTotals(games);
-    const metrics = teamMetrics(games, totals);
+    const seasonTotals = teamTotals(seasonGames);
+    const metrics = compareMetrics(
+      teamMetrics(games, totals),
+      teamMetrics(seasonGames, seasonTotals),
+      "本季"
+    );
     return {
       kind: "team",
       teamName: source.teamName || "球隊",
       count,
       hasData: games.length > 0,
       games,
+      seasonGameCount: seasonGames.length,
       dateRange: formatDateRange(games),
       metrics,
-      summary: summarizeTeam(games, metrics)
+      comparisonSummary: summarizeComparison(metrics, "本季"),
+      trends: teamTrends(seasonGames, count, seasonTotals),
+      summary: summarizeTeam(games, totals)
     };
   }
 
@@ -194,7 +265,8 @@
       };
     }
 
-    if (baseline === 0) {
+    const usesDifference = metric.comparisonType === "difference";
+    if (baseline === 0 && !usesDifference) {
       const isEqual = current === 0;
       return {
         tone: isEqual ? "even" : "unavailable",
@@ -208,7 +280,7 @@
       };
     }
 
-    const rawDelta = (current - baseline) / Math.abs(baseline);
+    const rawDelta = usesDifference ? current - baseline : (current - baseline) / Math.abs(baseline);
     const performanceDelta = metric.direction === "lower" ? -rawDelta : rawDelta;
     const displayDelta = metric.direction === "neutral" ? rawDelta : performanceDelta;
     const isEven = Math.abs(displayDelta) < 0.01;
@@ -216,15 +288,16 @@
       ? "neutral"
       : isEven ? "even" : performanceDelta > 0 ? "positive" : "negative";
     const label = metric.direction === "neutral"
-      ? isEven ? "接近基準" : `${rawDelta > 0 ? "較多" : "較少"} ${formatPercent(rawDelta)}`
-      : isEven ? "接近基準" : `${performanceDelta > 0 ? "較佳" : "較差"} ${formatPercent(performanceDelta)}`;
+      ? isEven ? "接近基準" : `${rawDelta > 0 ? "較多" : "較少"} ${formatComparisonDelta(rawDelta, usesDifference)}`
+      : isEven ? "接近基準" : `${performanceDelta > 0 ? "較佳" : "較差"} ${formatComparisonDelta(performanceDelta, usesDifference)}`;
+    const positionDelta = usesDifference ? displayDelta / number(metric.comparisonScale || 1) : displayDelta;
     return {
       tone,
       label,
       baselineLabel,
       baselineValue: baselineMetric.value,
       baselineText: `${baselineLabel} ${baselineMetric.value}`,
-      position: 50 + (clamp(displayDelta, -0.5, 0.5) * 80),
+      position: 50 + (clamp(positionDelta, -0.5, 0.5) * 80),
       lowLabel: metric.direction === "neutral" ? "較少" : "較差",
       highLabel: metric.direction === "neutral" ? "較多" : "較佳"
     };
@@ -298,18 +371,71 @@
   }
 
   function teamMetrics(games, totals) {
+    const winPercentage = divide(totals.wins, totals.wins + totals.losses);
+    const runsPerGame = divide(totals.runsFor, games.length);
+    const runsAllowedPerGame = divide(totals.runsAgainst, games.length);
+    const runDifferentialPerGame = divide(totals.runsFor - totals.runsAgainst, games.length);
     return [
-      { label: "近況", value: formatRecord(totals.wins, totals.losses, totals.ties), note: `近 ${games.length} 場` },
-      { label: "得失分", value: `${totals.runsFor}-${totals.runsAgainst}`, note: `分差 ${formatRunDiff(totals.runsFor - totals.runsAgainst)}` },
-      { label: "場均得分", value: formatDecimal(divide(totals.runsFor, games.length), 1), note: `總得分 ${totals.runsFor}` },
-      { label: "場均失分", value: formatDecimal(divide(totals.runsAgainst, games.length), 1), note: `總失分 ${totals.runsAgainst}` }
+      { label: "勝率", value: formatRate(winPercentage), rawValue: winPercentage, direction: "higher", note: formatRecord(totals.wins, totals.losses, totals.ties) },
+      { label: "場均得分", value: formatDecimal(runsPerGame, 1), rawValue: runsPerGame, direction: "higher", note: `總得分 ${totals.runsFor}` },
+      { label: "場均失分", value: formatDecimal(runsAllowedPerGame, 1), rawValue: runsAllowedPerGame, direction: "lower", note: `總失分 ${totals.runsAgainst}` },
+      {
+        label: "場均分差",
+        value: formatSignedDecimal(runDifferentialPerGame, 1),
+        rawValue: runDifferentialPerGame,
+        direction: "higher",
+        comparisonType: "difference",
+        comparisonScale: 4,
+        note: `得失分 ${totals.runsFor}-${totals.runsAgainst}`
+      }
     ];
   }
 
-  function summarizeTeam(games, metrics) {
+  function teamTrends(seasonGames, count, seasonTotals) {
+    const chronologicalGames = seasonGames.slice().reverse();
+    const windowSize = Math.min(count, chronologicalGames.length);
+    const points = [];
+    for (let index = windowSize - 1; index < chronologicalGames.length; index += 1) {
+      const windowGames = chronologicalGames.slice(index - windowSize + 1, index + 1);
+      const totals = teamTotals(windowGames);
+      points.push({
+        gameNumber: index + 1,
+        date: chronologicalGames[index].date,
+        opponent: chronologicalGames[index].opponent,
+        winPercentage: divide(totals.wins, totals.wins + totals.losses),
+        runsPerGame: divide(totals.runsFor, windowGames.length),
+        runsAllowedPerGame: divide(totals.runsAgainst, windowGames.length)
+      });
+    }
+    const seasonGameCount = chronologicalGames.length;
+    const recentStartGame = Math.max(1, seasonGameCount - count + 1);
+    const observations = chronologicalGames.map((game, index) => ({
+      gameNumber: index + 1,
+      date: game.date,
+      opponent: game.opponent,
+      result: game.result,
+      runsFor: number(game.runsFor),
+      runsAgainst: number(game.runsAgainst),
+      isRecent: index + 1 >= recentStartGame
+    }));
+    return {
+      windowSize,
+      seasonGameCount,
+      recentStartGame,
+      season: {
+        winPercentage: divide(seasonTotals.wins, seasonTotals.wins + seasonTotals.losses),
+        runsPerGame: divide(seasonTotals.runsFor, seasonGameCount),
+        runsAllowedPerGame: divide(seasonTotals.runsAgainst, seasonGameCount)
+      },
+      points,
+      observations
+    };
+  }
+
+  function summarizeTeam(games, totals) {
     if (games.length === 0) return "近期沒有可計算的比賽。";
     const latest = games[0];
-    return `近 ${games.length} 場 ${metrics[0].value}，得失分 ${metrics[1].value}；目前${teamStreak(games)}，最近一場 ${formatDate(latest.date)} ${latest.homeAway}場對 ${latest.opponent} ${latest.result} ${latest.runsFor}-${latest.runsAgainst}。`;
+    return `近 ${games.length} 場 ${formatRecord(totals.wins, totals.losses, totals.ties)}，得失分 ${totals.runsFor}-${totals.runsAgainst}；目前${teamStreak(games)}，最近一場 ${formatDate(latest.date)} ${latest.homeAway}場對 ${latest.opponent} ${latest.result} ${latest.runsFor}-${latest.runsAgainst}。`;
   }
 
   function teamStreak(games) {
@@ -387,7 +513,9 @@
   }
 
   function normalizeBaseline(value, source) {
-    return value === "career" && source.career ? "career" : "season";
+    if (value === "season") return "season";
+    if (value === "career" && source.career) return "career";
+    return "none";
   }
 
   function clamp(value, min, max) {
@@ -397,6 +525,10 @@
   function formatPercent(value) {
     const percent = Math.abs(value) * 100;
     return percent < 1 ? "<1%" : `${Math.round(percent)}%`;
+  }
+
+  function formatComparisonDelta(value, usesDifference) {
+    return usesDifference ? formatSignedDecimal(value, 1) : formatPercent(value);
   }
 
   function outsToInnings(outs) {
@@ -411,6 +543,12 @@
 
   function formatDecimal(value, digits = 2) {
     return Number.isFinite(value) ? value.toFixed(digits) : "-";
+  }
+
+  function formatSignedDecimal(value, digits = 1) {
+    if (!Number.isFinite(value)) return "-";
+    const formatted = value.toFixed(digits);
+    return value > 0 ? `+${formatted}` : formatted;
   }
 
   function formatRecord(wins, losses, ties) {
