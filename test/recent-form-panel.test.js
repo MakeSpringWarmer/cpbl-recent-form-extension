@@ -48,10 +48,16 @@ test("mounts once and owns loading and ready states", () => {
         seasonGameCount: 4,
         recentStartGame: 3,
         season: { avg: 0.275, ops: 0.72 },
+        timeline: [
+          { gameNumber: 1, date: "2026/04/01", opponent: "A" },
+          { gameNumber: 2, date: "2026/04/03", opponent: "B" },
+          { gameNumber: 3, date: "2026/05/20", opponent: "C" },
+          { gameNumber: 4, date: "2026/06/27", opponent: "D" }
+        ],
         points: [
-          { gameNumber: 2, avg: 0.25, ops: 0.65 },
-          { gameNumber: 3, avg: 0.3, ops: 0.76 },
-          { gameNumber: 4, avg: 0.325, ops: 0.81 }
+          { gameNumber: 2, date: "2026/04/03", opponent: "B", windowStartDate: "2026/04/01", windowEndDate: "2026/04/03", avg: 0.25, ops: 0.65 },
+          { gameNumber: 3, date: "2026/05/20", opponent: "C", windowStartDate: "2026/04/03", windowEndDate: "2026/05/20", avg: 0.3, ops: 0.76 },
+          { gameNumber: 4, date: "2026/06/27", opponent: "D", windowStartDate: "2026/05/20", windowEndDate: "2026/06/27", avg: 0.325, ops: 0.81 }
         ]
       },
       games: [{ date: "2026/06/27", opponent: "測試隊", plateAppearances: 4, atBats: 3, hits: 1, homeRuns: 0, walks: 1 }]
@@ -70,7 +76,13 @@ test("mounts once and owns loading and ready states", () => {
   assert.match(html, /cpbl-rfv-trend-line is-player/);
   assert.match(html, /目前 \.325/);
   assert.match(html, /本季 \.275/);
-  assert.match(html, /第 4 場/);
+  assert.match(html, /近期 5\/20–6\/27/);
+  assert.match(html, /4月/);
+  assert.match(html, /5月/);
+  assert.match(html, /6月/);
+  assert.match(html, /相隔 47 天/);
+  assert.match(html, /6\/27 vs D；5\/20–6\/27 近 2 場打擊率 \.325/);
+  assert.match(html, /tabindex="0"/);
   assert.doesNotMatch(html, /cpbl-rfv-benchmark/);
 
   panel.update({
@@ -185,9 +197,14 @@ test("mounts once and owns loading and ready states", () => {
         seasonGameCount: 3,
         recentStartGame: 2,
         season: { era: 3.2, whip: 1.2 },
+        timeline: [
+          { gameNumber: 1, date: "2026/05/01", opponent: "A" },
+          { gameNumber: 2, date: "2026/05/08", opponent: "B" },
+          { gameNumber: 3, date: "2026/05/15", opponent: "C" }
+        ],
         points: [
-          { gameNumber: 2, era: 3.5, whip: 1.3 },
-          { gameNumber: 3, era: 2.5, whip: 1.1 }
+          { gameNumber: 2, date: "2026/05/08", opponent: "B", windowStartDate: "2026/05/01", windowEndDate: "2026/05/08", era: 3.5, whip: 1.3 },
+          { gameNumber: 3, date: "2026/05/15", opponent: "C", windowStartDate: "2026/05/08", windowEndDate: "2026/05/15", era: 2.5, whip: 1.1 }
         ]
       },
       games: []
@@ -203,6 +220,7 @@ test("mounts once and owns loading and ready states", () => {
   assert.match(pitcherHtml, /目前 2\.50/);
   assert.match(pitcherHtml, /本季 3\.20/);
   assert.match(pitcherHtml, /目前 1\.10/);
+  assert.match(pitcherHtml, /5\/15 vs C；5\/8–5\/15 近 2 場ERA 2\.50/);
 });
 
 test("renders team season comparisons and rolling trend charts", () => {

@@ -6,7 +6,7 @@
 
 ## Player Form
 
-球員的 Recent Form。打者使用 AVG、OBP、SLG、OPS；投手使用 ERA、WHIP、局數、用球數與登板日期。整季趨勢依 Game Count 計算移動平均，打者追蹤 AVG、OPS，投手追蹤 ERA、WHIP，並與本季平均並列。
+球員的 Recent Form。打者使用 AVG、OBP、SLG、OPS；投手使用 ERA、WHIP、局數、用球數與登板日期。整季趨勢依 Game Count 計算移動平均，打者追蹤 AVG、OPS，投手追蹤 ERA、WHIP；X 軸保持出賽場次等距，並以本季平均、月份刻度、逐點日期與長出賽間隔輔助判讀。
 
 ## Team Form
 

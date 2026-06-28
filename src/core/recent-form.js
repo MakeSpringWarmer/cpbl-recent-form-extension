@@ -124,7 +124,7 @@
       const metrics = playerType === "pitcher"
         ? pitcherMetrics(windowGames.length, pitcherTotals(windowGames))
         : batterMetrics(batterTotals(windowGames));
-      points.push(playerTrendPoint(index + 1, chronologicalGames[index], metrics, playerType));
+      points.push(playerTrendPoint(index + 1, chronologicalGames[index], windowGames[0], metrics, playerType));
     }
     const seasonMetrics = playerType === "pitcher"
       ? pitcherMetrics(chronologicalGames.length, pitcherTotals(chronologicalGames))
@@ -135,16 +135,23 @@
       windowSize,
       seasonGameCount,
       recentStartGame: Math.max(1, seasonGameCount - count + 1),
+      timeline: chronologicalGames.map((game, index) => ({
+        gameNumber: index + 1,
+        date: game.date,
+        opponent: game.opponent
+      })),
       season: playerTrendValues(seasonMetrics, playerType),
       points
     };
   }
 
-  function playerTrendPoint(gameNumber, game, metrics, playerType) {
+  function playerTrendPoint(gameNumber, game, windowStartGame, metrics, playerType) {
     return {
       gameNumber,
       date: game.date,
       opponent: game.opponent,
+      windowStartDate: windowStartGame.date,
+      windowEndDate: game.date,
       ...playerTrendValues(metrics, playerType)
     };
   }

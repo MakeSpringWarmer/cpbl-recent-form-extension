@@ -347,6 +347,7 @@
     const trends = data.trends;
     if (!trends || trends.points.length < 2) return;
     const document = panel.ownerDocument;
+    const timeline = Array.isArray(trends.timeline) ? trends.timeline : trends.points;
     const definitions = trends.playerType === "pitcher"
       ? [
         { title: "ERA", key: "era", maximum: 6, format: formatTrendPitching },
@@ -356,24 +357,27 @@
         { title: "打擊率", key: "avg", maximum: 0.5, format: formatTrendRate },
         { title: "OPS", key: "ops", maximum: 1.2, format: formatTrendRate }
       ];
+    const recentTimeline = timeline.slice(Math.max(0, trends.recentStartGame - 1));
+    const recentDateRange = formatCompactDateRange(recentTimeline);
+    const hasLongGap = findTrendGaps(timeline).length > 0;
     const section = document.createElement("section");
     section.className = "cpbl-rfv-trends";
     section.innerHTML = `
       <div class="cpbl-rfv-trends-heading">
         <div>
           <div class="cpbl-rfv-trends-title">整季走勢</div>
-          <div class="cpbl-rfv-trends-caption">折線為近 ${escapeHtml(trends.windowSize)} 場移動平均，虛線為本季平均</div>
+          <div class="cpbl-rfv-trends-caption">場次等距，折線為近 ${escapeHtml(trends.windowSize)} 場移動平均，虛線為本季平均${hasLongGap ? "；圖中標記 14 天以上間隔" : ""}</div>
         </div>
-        <div class="cpbl-rfv-trends-meta">本季 ${escapeHtml(trends.seasonGameCount)} 場出賽</div>
+        <div class="cpbl-rfv-trends-meta">近期 ${escapeHtml(recentDateRange)} · 本季 ${escapeHtml(trends.seasonGameCount)} 場</div>
       </div>
       <div class="cpbl-rfv-trend-grid">
-        ${definitions.map((definition) => renderPlayerTrendCard(trends, definition)).join("")}
+        ${definitions.map((definition, index) => renderPlayerTrendCard({ ...trends, timeline }, definition, index === 0)).join("")}
       </div>
     `;
     panel.appendChild(section);
   }
 
-  function renderPlayerTrendCard(trends, definition) {
+  function renderPlayerTrendCard(trends, definition, showGapMarkers) {
     const latest = trends.points[trends.points.length - 1];
     const values = trends.points.map((point) => point[definition.key])
       .concat([trends.season[definition.key]])
@@ -400,14 +404,19 @@
           maximum,
           baseline: trends.season[definition.key],
           label: `近 ${trends.windowSize} 場${definition.title}走勢，目前 ${currentValue}，本季 ${seasonValue}`,
-          series: [{ className: "is-player", value: (point) => point[definition.key] }]
+          gapTimeline: showGapMarkers ? trends.timeline : [],
+          series: [{
+            className: "is-player",
+            value: (point) => point[definition.key],
+            title: (point) => `${formatCompactDate(point.date)} vs ${point.opponent || "-"}；${formatCompactDateRange([point.windowStartDate, point.windowEndDate])} 近 ${trends.windowSize} 場${definition.title} ${definition.format(point[definition.key])}`
+          }]
         })}
-        ${renderTrendAxis(trends.seasonGameCount)}
+        ${renderTrendTimeAxis(trends.timeline, trends.seasonGameCount)}
       </figure>
     `;
   }
 
-  function renderTrendSvg({ points, observations, seasonGameCount, recentStartGame, minimum, maximum, baseline, label, series, observationSeries }) {
+  function renderTrendSvg({ points, observations, seasonGameCount, recentStartGame, minimum, maximum, baseline, label, series, observationSeries, gapTimeline = [] }) {
     const width = 600;
     const height = 132;
     const inset = { top: 10, right: 10, bottom: 10, left: 10 };
@@ -427,21 +436,63 @@
       ? `<line class="cpbl-rfv-trend-baseline" x1="${inset.left}" y1="${y(baseline)}" x2="${inset.left + plotWidth}" y2="${y(baseline)}"></line>`
       : "";
     const observationPoints = renderObservationPoints(observations, observationSeries, x, y, minimum, maximum);
+    const gapMarkers = renderTrendGapMarkers(gapTimeline, x, inset, plotHeight);
     const paths = series.map((item) => {
       const path = chartPath(points, item.value, x, y);
       const latestValue = item.value(points[points.length - 1]);
       const latestGameNumber = points[points.length - 1].gameNumber;
+      const hitPoints = item.title ? renderTrendHitPoints(points, item, x, y) : "";
       return `
         <path class="cpbl-rfv-trend-line ${escapeHtml(item.className)}" d="${path}"></path>
         ${Number.isFinite(latestValue) ? `<circle class="cpbl-rfv-trend-point ${escapeHtml(item.className)}" cx="${x(latestGameNumber)}" cy="${y(latestValue)}" r="4"></circle>` : ""}
+        ${hitPoints}
       `;
     }).join("");
     return `
       <svg class="cpbl-rfv-trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)}">
         <rect class="cpbl-rfv-trend-highlight" x="${highlightStart}" y="${inset.top}" width="${highlightWidth}" height="${plotHeight}"></rect>
-        ${gridLines}${baselineLine}${observationPoints}${paths}
+        ${gridLines}${baselineLine}${gapMarkers}${observationPoints}${paths}
       </svg>
     `;
+  }
+
+  function renderTrendHitPoints(points, series, x, y) {
+    return points.map((point, index) => {
+      const value = series.value(point);
+      if (!Number.isFinite(value)) return "";
+      const title = series.title(point);
+      return `
+        <g class="cpbl-rfv-trend-hit" tabindex="${index === points.length - 1 ? "0" : "-1"}" role="img" aria-label="${escapeHtml(title)}">
+          <title>${escapeHtml(title)}</title>
+          <circle class="cpbl-rfv-trend-hit-target" cx="${x(point.gameNumber)}" cy="${y(value)}" r="10"></circle>
+          <circle class="cpbl-rfv-trend-hit-focus" cx="${x(point.gameNumber)}" cy="${y(value)}" r="3"></circle>
+        </g>
+      `;
+    }).join("");
+  }
+
+  function renderTrendGapMarkers(timeline, x, inset, plotHeight) {
+    return findTrendGaps(timeline).map((gap) => {
+      const markerX = (x(gap.previous.gameNumber) + x(gap.current.gameNumber)) / 2;
+      return `
+        <g class="cpbl-rfv-trend-gap" aria-label="${escapeHtml(`${formatCompactDate(gap.previous.date)} 至 ${formatCompactDate(gap.current.date)}，相隔 ${gap.days} 天`)}">
+          <line x1="${markerX}" y1="${inset.top}" x2="${markerX}" y2="${inset.top + plotHeight}"></line>
+          <text x="${markerX}" y="${inset.top + 11}">相隔 ${gap.days} 天</text>
+        </g>
+      `;
+    }).join("");
+  }
+
+  function findTrendGaps(timeline = []) {
+    const gaps = [];
+    for (let index = 1; index < timeline.length; index += 1) {
+      const previous = timeline[index - 1];
+      const current = timeline[index];
+      const days = calendarDaysBetween(previous.date, current.date);
+      if (days >= 14) gaps.push({ previous, current, days });
+    }
+    return gaps.sort((a, b) => b.days - a.days).slice(0, 2)
+      .sort((a, b) => a.current.gameNumber - b.current.gameNumber);
   }
 
   function renderObservationPoints(observations, series, x, y, minimum, maximum) {
@@ -481,6 +532,65 @@
 
   function renderTrendAxis(seasonGameCount) {
     return `<div class="cpbl-rfv-trend-axis"><span>第 1 場</span><span>第 ${escapeHtml(seasonGameCount)} 場</span></div>`;
+  }
+
+  function renderTrendTimeAxis(timeline, seasonGameCount) {
+    if (!timeline.length) return renderTrendAxis(seasonGameCount);
+    let ticks = timeline.filter((item, index) => {
+      if (index === 0) return true;
+      return monthKey(item.date) !== monthKey(timeline[index - 1].date);
+    });
+    while (ticks.length > 6) {
+      ticks = ticks.filter((_tick, index) => index === 0 || index === ticks.length - 1 || index % 2 === 0);
+    }
+    return `
+      <div class="cpbl-rfv-trend-time-axis" aria-label="時間軸，依出賽場次等距">
+        ${ticks.map((tick) => {
+          const position = ((tick.gameNumber - 1) / Math.max(1, seasonGameCount - 1)) * 100;
+          const edgeClass = position <= 0 ? " is-start" : position >= 100 ? " is-end" : "";
+          return `<span class="cpbl-rfv-trend-time-tick${edgeClass}" style="--rfv-time-x: ${position}%">${escapeHtml(formatMonth(tick.date))}</span>`;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function formatCompactDateRange(values) {
+    const dates = values.map((value) => parseChartDate(typeof value === "string" ? value : value.date)).filter(Boolean);
+    if (!dates.length) return "日期未知";
+    const oldest = new Date(Math.min(...dates));
+    const newest = new Date(Math.max(...dates));
+    return oldest.getTime() === newest.getTime()
+      ? formatCompactDate(oldest)
+      : `${formatCompactDate(oldest)}–${formatCompactDate(newest)}`;
+  }
+
+  function formatCompactDate(value) {
+    const date = parseChartDate(value);
+    return date ? `${date.getMonth() + 1}/${date.getDate()}` : "日期未知";
+  }
+
+  function formatMonth(value) {
+    const date = parseChartDate(value);
+    return date ? `${date.getMonth() + 1}月` : "";
+  }
+
+  function monthKey(value) {
+    const date = parseChartDate(value);
+    return date ? `${date.getFullYear()}-${date.getMonth()}` : "";
+  }
+
+  function calendarDaysBetween(startValue, endValue) {
+    const start = parseChartDate(startValue);
+    const end = parseChartDate(endValue);
+    return start && end ? Math.max(0, Math.round((end - start) / 86400000)) : 0;
+  }
+
+  function parseChartDate(value) {
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+    const match = String(value || "").match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (!match) return null;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
   function formatTrendRate(value) {

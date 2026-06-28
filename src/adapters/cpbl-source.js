@@ -29,9 +29,13 @@
     const cached = await cache.get(cacheKey);
     const cachedEntry = cached && cached[cacheKey];
     const cacheIsFresh = cachedEntry && now - cachedEntry.updatedAt < CACHE_TTL_MS;
-    let context = cacheIsFresh ? normalizePlayerContext(cachedEntry.context || pageContext) : null;
+    const cachedContext = cacheIsFresh ? cachedEntry.context || pageContext : null;
+    let context = cachedContext ? normalizePlayerContext(cachedContext) : null;
+    const cachedTypeWasCorrected = cachedContext && Boolean(cachedContext.isPitcher) !== context.isPitcher;
     let rows = cacheIsFresh ? cachedEntry.rows : null;
-    let career = cacheIsFresh && Object.hasOwn(cachedEntry, "career") ? cachedEntry.career : undefined;
+    let career = cacheIsFresh && !cachedTypeWasCorrected && cachedEntry.career
+      ? cachedEntry.career
+      : undefined;
 
     if (!rows || !context) {
       const followPage = await fetchText(fetcher, `/team/follow?Acnt=${encodeURIComponent(acnt)}`, {

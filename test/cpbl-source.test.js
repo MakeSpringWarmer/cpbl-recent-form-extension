@@ -68,6 +68,19 @@ test("player adapter hides fetch, token and official field names", async () => {
 });
 
 test("explicit fielder position corrects a stale pitcher classification", async () => {
+  const calls = [];
+  const fetch = async (url) => {
+    calls.push(url);
+    if (url.startsWith("/team/person")) {
+      return response({ text: 'url: "/team/getbattingcareerscore", headers: { RequestVerificationToken: \'career-token\' }' });
+    }
+    return response({ json: { Success: true, BattingCareerScore: JSON.stringify([{
+      TotalGames: 600,
+      HitCnt: 2100,
+      HittingCnt: 700,
+      TotalBases: 1120
+    }]) } });
+  };
   const cache = memoryStorage({
     "follow:42:A:2026:內野手": {
       updatedAt: new Date(2026, 5, 27).getTime(),
@@ -79,7 +92,7 @@ test("explicit fielder position corrects a stale pitcher classification", async 
   const source = await CpblSource.load({
     document: fakePlayerDocument("defendStation: '內野手'; year: '2026'", "投球成績"),
     location: { pathname: "/team/follow", href: "https://cpbl.com.tw/team/follow?Acnt=42", origin: "https://cpbl.com.tw" },
-    fetch: async () => { throw new Error("fetch should not run"); },
+    fetch,
     cache,
     now: new Date(2026, 5, 27).getTime()
   });
@@ -87,6 +100,8 @@ test("explicit fielder position corrects a stale pitcher classification", async 
   assert.equal(source.playerType, "batter");
   assert.equal(source.games[0].atBats, 4);
   assert.equal(source.games[0].hits, 2);
+  assert.equal(source.career.atBats, 2100);
+  assert.deepEqual(calls, ["/team/person?Acnt=42", "/team/getbattingcareerscore"]);
 });
 
 test("player adapter reuses a fresh cache entry", async () => {

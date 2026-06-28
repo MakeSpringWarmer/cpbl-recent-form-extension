@@ -16,7 +16,7 @@ CPBL Recent Form Visualizer
 
 瀏覽 CPBL 官網時，直接在原有頁面查看球員與球隊的近期表現。
 
-打者顯示 AVG、OBP、SLG 與 OPS；投手顯示 ERA、WHIP、每場局數、平均用球與登板月曆。球員指標預設使用「近況」，也可切換「比較本季」或「比較生涯」；整季趨勢圖以移動平均呈現打者 AVG、OPS 或投手 ERA、WHIP，並標示本季平均。球隊逐日戰績頁比較近期與本季勝率、場均得失分及場均分差，以整季移動平均折線搭配近期逐場攻守資料點呈現走勢。統計場數可直接在面板上調整。
+打者顯示 AVG、OBP、SLG 與 OPS；投手顯示 ERA、WHIP、每場局數、平均用球與登板月曆。球員指標預設使用「近況」，也可切換「比較本季」或「比較生涯」；整季趨勢圖以移動平均呈現打者 AVG、OPS 或投手 ERA、WHIP，並以本季平均、月份、日期提示與長出賽間隔輔助判讀。球隊逐日戰績頁比較近期與本季勝率、場均得失分及場均分差，以整季移動平均折線搭配近期逐場攻守資料點呈現走勢。統計場數可直接在面板上調整。
 
 安裝後開啟支援的 CPBL 球員頁或球隊逐日戰績頁，近期表現面板會自動出現在官方內容上方。
 
@@ -98,7 +98,7 @@ TODO: publish `PRIVACY.md` at a publicly accessible URL before submission.
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
-| 0.1.0 | 2026-06-28 | Initial release with player comparisons, player and team season trends, focused recent-game observations, and position-based batter/pitcher detection. | Draft |
+| 0.1.0 | 2026-06-28 | Initial release with player comparisons, time-assisted player and team season trends, focused recent-game observations, position-based player detection, and automatic retry for unavailable career data. | Draft |
 
 ## Review Notes
 

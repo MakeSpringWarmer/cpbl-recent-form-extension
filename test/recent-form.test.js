@@ -28,6 +28,12 @@ test("builds batter metrics from one normalized total", () => {
   assert.equal(result.trends.windowSize, 2);
   assert.equal(result.trends.seasonGameCount, 2);
   assert.equal(result.trends.points.length, 1);
+  assert.deepEqual(result.trends.timeline.map(({ gameNumber, date }) => ({ gameNumber, date })), [
+    { gameNumber: 1, date: "2026/06/25" },
+    { gameNumber: 2, date: "2026/06/27" }
+  ]);
+  assert.equal(result.trends.points[0].windowStartDate, "2026/06/25");
+  assert.equal(result.trends.points[0].windowEndDate, "2026/06/27");
   assert.ok(Math.abs(result.trends.points[0].avg - (3 / 7)) < 0.000001);
   assert.ok(Math.abs(result.trends.points[0].ops - (14 / 9)) < 0.000001);
 });
