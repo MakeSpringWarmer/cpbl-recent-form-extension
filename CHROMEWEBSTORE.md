@@ -88,7 +88,7 @@ https://makespringwarmer.github.io/cpbl-recent-form-extension/privacy.html
 
 **Publisher Name**: MakeSpringWarmer
 
-**Contact Email**: TODO before submission
+**Contact Email**: averyhuang88@gmail.com
 
 **Support URL**: https://github.com/MakeSpringWarmer/cpbl-recent-form-extension/issues
 
