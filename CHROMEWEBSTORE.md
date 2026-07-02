@@ -1,6 +1,6 @@
 # Chrome Web Store Listing - CPBL Recent Form Visualizer
 
-> Last Updated: 2026-06-28
+> Last Updated: 2026-07-02
 
 ## Store Listing
 
@@ -40,11 +40,11 @@ Chinese (Traditional)
 
 | Asset | Dimensions | Status | Filename |
 |-------|-----------|--------|----------|
-| Store Icon | 128x128 PNG | Not created | |
+| Store Icon | 128x128 PNG | Ready | `icons/icon-128.png` |
 | Screenshot 1 | 1280x800 or 640x400 | Needs update | Player comparisons and season trends |
 | Screenshot 2 | 1280x800 or 640x400 | Needs update | Pitcher calendar |
 | Screenshot 3 | 1280x800 or 640x400 | Needs update | Team season comparisons and trends |
-| Small Promo Tile | 440x280 | Not created | |
+| Small Promo Tile | 440x280 PNG | Ready | `store-assets/small-promo-440x280.png` |
 
 ### Screenshot Notes
 
@@ -76,7 +76,7 @@ Chinese (Traditional)
 
 **Privacy Policy URL**
 
-TODO: publish `PRIVACY.md` at a publicly accessible URL before submission.
+https://makespringwarmer.github.io/cpbl-recent-form-extension/privacy.html
 
 ## Distribution
 
@@ -106,7 +106,7 @@ TODO: publish `PRIVACY.md` at a publicly accessible URL before submission.
 
 - Only supported CPBL official player and daily-record pages are modified.
 - Display depends on the current structure and availability of CPBL public data.
-- Store icon, current screenshots, contact email, and public privacy-policy URL remain required before submission.
+- Current screenshots and contact email remain required before submission.
 
 ### Rejection History
 
