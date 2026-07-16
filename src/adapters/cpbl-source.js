@@ -16,7 +16,7 @@
     return loadPlayerSource(dependencies);
   }
 
-  async function loadPlayerSource({ document, location, fetch: fetcher, cache, now = Date.now() }) {
+  async function loadPlayerSource({ document, location, fetch: fetcher, cache, wait = defaultWait, now = Date.now() }) {
     if (typeof fetcher !== "function" || !cache) {
       throw new TypeError("Player source requires fetch and cache adapters");
     }
@@ -29,26 +29,42 @@
     const cached = await cache.get(cacheKey);
     const cachedEntry = cached && cached[cacheKey];
     const cacheIsFresh = cachedEntry && now - cachedEntry.updatedAt < CACHE_TTL_MS;
-    const cachedContext = cacheIsFresh ? cachedEntry.context || pageContext : null;
+    const storedContext = cachedEntry ? normalizePlayerContext(cachedEntry.context || pageContext) : null;
+    const cachedContext = cacheIsFresh ? storedContext : null;
     let context = cachedContext ? normalizePlayerContext(cachedContext) : null;
-    const cachedTypeWasCorrected = cachedContext && Boolean(cachedContext.isPitcher) !== context.isPitcher;
+    const cachedTypeWasCorrected = storedContext &&
+      Boolean(cachedEntry?.context?.isPitcher) !== storedContext.isPitcher;
     let rows = cacheIsFresh ? cachedEntry.rows : null;
     let career = cacheIsFresh && !cachedTypeWasCorrected && cachedEntry.career
       ? cachedEntry.career
       : undefined;
+    let usedStaleCache = false;
 
     if (!rows || !context) {
-      const followPage = await fetchText(fetcher, `/team/follow?Acnt=${encodeURIComponent(acnt)}`, {
-        credentials: "include"
-      }, "follow page");
-      const token = extractFollowToken(followPage);
-      context = {
-        defendStation: matchFirst(followPage, /defendStation:\s*'([^']+)'/) || pageContext.defendStation,
-        year: matchFirst(followPage, /year:\s*'(\d{4})'/) || pageContext.year,
-        isPitcher: pageContext.isPitcher
-      };
-      context = normalizePlayerContext(context);
-      rows = await fetchPlayerRows(fetcher, location, acnt, token, context);
+      try {
+        const loaded = await retry(async () => {
+          const followPage = await fetchText(fetcher, `/team/follow?Acnt=${encodeURIComponent(acnt)}`, {
+            credentials: "include"
+          }, "follow page");
+          const token = extractFollowToken(followPage);
+          const nextContext = normalizePlayerContext({
+            defendStation: matchFirst(followPage, /defendStation:\s*'([^']+)'/) || pageContext.defendStation,
+            year: matchFirst(followPage, /year:\s*'(\d{4})'/) || pageContext.year,
+            isPitcher: pageContext.isPitcher
+          });
+          const nextRows = await fetchPlayerRows(fetcher, location, acnt, token, nextContext);
+          return { context: nextContext, rows: nextRows };
+        }, wait);
+        context = loaded.context;
+        rows = loaded.rows;
+      } catch (error) {
+        if (!storedContext || !Array.isArray(cachedEntry?.rows)) throw error;
+        context = storedContext;
+        rows = cachedEntry.rows;
+        career = cachedTypeWasCorrected ? undefined : cachedEntry.career;
+        usedStaleCache = true;
+        console.debug("[CPBL RFV] using stale player cache", error);
+      }
     }
 
     if (career === undefined) {
@@ -60,7 +76,14 @@
       }
     }
 
-    await cache.set({ [cacheKey]: { rows, context, career, updatedAt: now } });
+    await cache.set({
+      [cacheKey]: {
+        rows,
+        context,
+        career,
+        updatedAt: usedStaleCache ? cachedEntry.updatedAt : now
+      }
+    });
     return normalizePlayerSource(rows, context, career);
   }
 
@@ -129,6 +152,19 @@
     const response = await fetcher(url, options);
     if (!response.ok) throw new Error(`${label} ${response.status}`);
     return response.text();
+  }
+
+  async function retry(task, wait, attempts = 2) {
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await task();
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts - 1) await wait(350 * (attempt + 1));
+      }
+    }
+    throw lastError;
   }
 
   function extractPlayerContext(document, now) {

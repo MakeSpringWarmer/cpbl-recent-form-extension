@@ -6,7 +6,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createRecentFormPanel() {
   const PANEL_ID = "cpbl-rfv-panel";
 
-  function mount({ document, mode, countOptions, onCountChange, onBaselineChange }) {
+  function mount({ document, mode, countOptions, onCountChange, onDateRangeChange, onBaselineChange }) {
     if (document.getElementById(PANEL_ID)) return null;
     const mountPoint = findMountPoint(document, mode);
     if (!mountPoint) return null;
@@ -28,7 +28,7 @@
           return;
         }
         if (state.status === "ready") {
-          renderReady(panel, state.data, countOptions, onCountChange, onBaselineChange);
+          renderReady(panel, state.data, countOptions, onCountChange, onDateRangeChange, onBaselineChange);
           return;
         }
         throw new TypeError(`unknown panel status: ${state.status}`);
@@ -70,15 +70,20 @@
     panel.append(header, message);
   }
 
-  function renderReady(panel, data, countOptions, onCountChange, onBaselineChange) {
+  function renderReady(panel, data, countOptions, onCountChange, onDateRangeChange, onBaselineChange) {
     const document = panel.ownerDocument;
     panel.innerHTML = "";
-    const header = renderHeader(document, data, countOptions);
+    const header = renderHeader(document, data);
     panel.appendChild(header);
-    if (data.kind === "team") attachCountControl(header, onCountChange);
-    else {
+    if (data.kind === "team") {
+      const scopeBar = renderTeamScopeBar(document, data, countOptions);
+      panel.appendChild(scopeBar);
+      attachScopeControl(scopeBar, data, onDateRangeChange);
+      attachCountControl(scopeBar, onCountChange);
+    } else {
       const scopeBar = renderScopeBar(document, data, countOptions);
       panel.appendChild(scopeBar);
+      attachScopeControl(scopeBar, data, onDateRangeChange);
       attachCountControl(scopeBar, onCountChange);
       attachBaselineControl(scopeBar, onBaselineChange);
     }
@@ -102,14 +107,14 @@
     }
   }
 
-  function renderHeader(document, data, countOptions) {
+  function renderHeader(document, data) {
     const header = document.createElement("div");
     header.className = "cpbl-rfv-header";
     const isTeam = data.kind === "team";
     header.innerHTML = `
       <div>
         <div class="cpbl-rfv-eyebrow">${isTeam ? "CPBL Team Form" : "CPBL Player Form"}</div>
-        <div class="cpbl-rfv-title">${isTeam ? `${escapeHtml(data.teamName)} 近 ${data.games.length} 場` : escapeHtml(data.title)}</div>
+        <div class="cpbl-rfv-title">${isTeam ? `${escapeHtml(data.teamName)} ${escapeHtml(displayScopeLabel(data))}` : escapeHtml(data.title)}</div>
       </div>
       <div class="cpbl-rfv-toolbar">
         <div class="cpbl-rfv-meta">
@@ -117,7 +122,6 @@
             ? `<span>${escapeHtml(data.dateRange)}</span><span>逐日戰績</span>`
             : `<span>${escapeHtml(data.playerTypeLabel)}</span><span>一軍例行賽</span>`}
         </div>
-        ${isTeam ? renderCountControl(data.count, countOptions) : ""}
       </div>
     `;
     return header;
@@ -143,8 +147,18 @@
       </div>
       <div class="cpbl-rfv-scope-actions">
         <div class="cpbl-rfv-range-stamp">${escapeHtml(data.dateRange)}</div>
-        ${renderCountControl(data.count, countOptions)}
+        ${renderScopeControl(data, countOptions)}
       </div>
+    `;
+    return scopeBar;
+  }
+
+  function renderTeamScopeBar(document, data, countOptions) {
+    const scopeBar = document.createElement("div");
+    scopeBar.className = "cpbl-rfv-scope-bar is-team";
+    scopeBar.innerHTML = `
+      <div class="cpbl-rfv-range-stamp">${escapeHtml(data.dateRange)}</div>
+      <div class="cpbl-rfv-scope-actions">${renderScopeControl(data, countOptions)}</div>
     `;
     return scopeBar;
   }
@@ -177,7 +191,7 @@
     const comparison = metric.comparison || null;
     card.className = `cpbl-rfv-card${comparison ? ` is-${escapeHtml(comparison.tone)}` : ""}`;
     card.innerHTML = comparison
-      ? renderBenchmarkCard(metric, comparison, data.count)
+      ? renderBenchmarkCard(metric, comparison, displayScopeLabel(data))
       : `
         <div class="cpbl-rfv-label">${escapeHtml(metric.label)}</div>
         <div class="cpbl-rfv-value">${escapeHtml(metric.value)}</div>
@@ -186,19 +200,19 @@
     return card;
   }
 
-  function renderBenchmarkCard(metric, comparison, count) {
+  function renderBenchmarkCard(metric, comparison, scopeLabel) {
     const position = Math.min(90, Math.max(10, Number(comparison.position) || 50));
     const deltaStart = Math.min(position, 50);
     const deltaWidth = Math.abs(position - 50);
     const direction = comparisonDirection(comparison, position);
-    const description = `${metric.label}，${comparison.baselineText}，近 ${count} 場 ${metric.value}，${comparison.label}`;
+    const description = `${metric.label}，${comparison.baselineText}，${scopeLabel} ${metric.value}，${comparison.label}`;
     return `
       <div class="cpbl-rfv-card-heading">
         <div class="cpbl-rfv-label">${escapeHtml(metric.label)}</div>
         <div class="cpbl-rfv-compare-status"><span aria-hidden="true">${direction}</span>${escapeHtml(comparison.label)}</div>
       </div>
       <div class="cpbl-rfv-current-value">
-        <span>近 ${escapeHtml(count)} 場</span>
+        <span>${escapeHtml(scopeLabel)}</span>
         <strong>${escapeHtml(metric.value)}</strong>
       </div>
       <div
@@ -246,7 +260,7 @@
     strip.innerHTML = data.games.slice().reverse().map(renderTeamGameChip).join("");
     panel.appendChild(strip);
 
-    const details = createDetails(document, `近 ${data.games.length} 場明細`, data.dateRange);
+    const details = createDetails(document, `${displayScopeLabel(data)}明細`, data.dateRange);
     const games = document.createElement("div");
     games.className = "cpbl-rfv-games";
     games.innerHTML = renderTeamGameTable(data.games);
@@ -258,84 +272,85 @@
     if (!trends || trends.points.length < 2) return;
     const document = panel.ownerDocument;
     const latest = trends.points[trends.points.length - 1];
-    const runValues = trends.points.flatMap((point) => [point.runsPerGame, point.runsAllowedPerGame])
-      .concat([trends.season.runsPerGame, trends.season.runsAllowedPerGame])
+    const winFormMaximum = formChartMaximum(trends.points.map((point) => point.winForm));
+    const runValues = trends.points.map((point) => point.runDifferentialPerGame)
+      .concat([trends.season.runDifferentialPerGame])
       .filter(Number.isFinite);
-    const runMaximum = Math.max(1, Math.ceil(Math.max(...runValues) + 0.5));
+    const runMaximum = Math.max(2, Math.ceil(Math.max(...runValues.map(Math.abs)) + 0.5));
+    const winStatus = trendStatus(latest.winForm);
+    const runStatus = trendStatus(latest.runDifferentialPerGame, { threshold: 0.25, unit: "runs" });
     const section = document.createElement("section");
     section.className = "cpbl-rfv-trends";
     section.innerHTML = `
       <div class="cpbl-rfv-trends-heading">
         <div>
           <div class="cpbl-rfv-trends-title">整季走勢</div>
-          <div class="cpbl-rfv-trends-caption">折線為近 ${escapeHtml(trends.windowSize)} 場移動平均；攻守資料點僅顯示近期場次</div>
+          <div class="cpbl-rfv-trends-caption">折線為近 ${escapeHtml(trends.windowSize)} 場移動平均；圖表上方一律代表狀態較佳</div>
         </div>
         <div class="cpbl-rfv-trends-meta">本季 ${escapeHtml(trends.seasonGameCount)} 場</div>
       </div>
       <div class="cpbl-rfv-trend-grid">
         <figure class="cpbl-rfv-trend-card">
           <figcaption>
-            <strong>移動勝率</strong>
+            <div class="cpbl-rfv-trend-title-group">
+              <strong>勝率狀態</strong>
+              <span class="cpbl-rfv-trend-status is-${winStatus.tone}">${escapeHtml(winStatus.label)}</span>
+            </div>
             <div class="cpbl-rfv-trend-legend">
-              <span class="cpbl-rfv-trend-key is-win">目前 ${escapeHtml(formatTrendRate(latest.winPercentage))}</span>
+              <span class="cpbl-rfv-trend-key is-form">最新 ${escapeHtml(formatTrendRate(latest.winPercentage))}</span>
               <span class="cpbl-rfv-trend-key is-season">本季 ${escapeHtml(formatTrendRate(trends.season.winPercentage))}</span>
             </div>
           </figcaption>
           ${renderTrendSvg({
             points: trends.points,
-            observations: trends.observations,
+            observations: [],
             seasonGameCount: trends.seasonGameCount,
             recentStartGame: trends.recentStartGame,
-            minimum: 0,
-            maximum: 1,
-            baseline: trends.season.winPercentage,
-            label: `近 ${trends.windowSize} 場移動勝率，目前 ${formatTrendRate(latest.winPercentage)}，本季 ${formatTrendRate(trends.season.winPercentage)}`,
-            series: [{ className: "is-win", value: (point) => point.winPercentage }],
-            observationSeries: [{
-              className: (game) => `is-result-${String(game.result || "tie").toLowerCase()}`,
-              shape: (game) => game.result === "L" ? "square" : game.result === "T" ? "diamond" : "circle",
-              value: (game) => game.result === "W" ? 1 : game.result === "L" ? 0 : 0.5,
-              title: (game) => `${game.date} vs ${game.opponent}，${game.result} ${game.runsFor}-${game.runsAgainst}`
-            }]
+            recentEndGame: trends.recentEndGame,
+            minimum: -winFormMaximum,
+            maximum: winFormMaximum,
+            label: `近 ${trends.windowSize} 場勝率狀態，${winStatus.label}，最新 ${formatTrendRate(latest.winPercentage)}，本季 ${formatTrendRate(trends.season.winPercentage)}`,
+            performanceBand: 0.05,
+            guideLabels: ["較佳", "本季", "較差"],
+            series: [{
+              className: "is-form",
+              value: (point) => point.winForm,
+              title: (point) => `${point.date} vs ${point.opponent || "-"}；近 ${trends.windowSize} 場勝率 ${formatTrendRate(point.winPercentage)}，${trendStatus(point.winForm).label}`
+            }],
+            observationSeries: []
           })}
           ${renderTrendAxis(trends.seasonGameCount)}
         </figure>
         <figure class="cpbl-rfv-trend-card">
           <figcaption>
-            <strong>攻守走勢</strong>
+            <div class="cpbl-rfv-trend-title-group">
+              <strong>得失分差</strong>
+              <span class="cpbl-rfv-trend-status is-${runStatus.tone}">${escapeHtml(runStatus.label)}</span>
+            </div>
             <div class="cpbl-rfv-trend-legend">
-              <span class="cpbl-rfv-trend-key is-scored">得分 ${escapeHtml(formatTrendDecimal(latest.runsPerGame))}</span>
-              <span class="cpbl-rfv-trend-key is-allowed">失分 ${escapeHtml(formatTrendDecimal(latest.runsAllowedPerGame))}</span>
+              <span class="cpbl-rfv-trend-key is-form">最新 ${escapeHtml(formatSignedTrendDecimal(latest.runDifferentialPerGame))}</span>
+              <span class="cpbl-rfv-trend-key is-season">本季 ${escapeHtml(formatSignedTrendDecimal(trends.season.runDifferentialPerGame))}</span>
             </div>
           </figcaption>
           ${renderTrendSvg({
             points: trends.points,
-            observations: trends.observations.filter((game) => game.isRecent),
+            observations: [],
             seasonGameCount: trends.seasonGameCount,
             recentStartGame: trends.recentStartGame,
-            minimum: 0,
+            recentEndGame: trends.recentEndGame,
+            minimum: -runMaximum,
             maximum: runMaximum,
-            label: `近 ${trends.windowSize} 場攻守走勢，目前場均得分 ${formatTrendDecimal(latest.runsPerGame)}、場均失分 ${formatTrendDecimal(latest.runsAllowedPerGame)}`,
-            series: [
-              { className: "is-scored", value: (point) => point.runsPerGame },
-              { className: "is-allowed", value: (point) => point.runsAllowedPerGame }
-            ],
-            observationSeries: [
-              {
-                className: "is-scored",
-                shape: "circle",
-                value: (game) => game.runsFor,
-                title: (game) => `${game.date} vs ${game.opponent}，得分 ${game.runsFor}`
-              },
-              {
-                className: "is-allowed",
-                shape: "square",
-                value: (game) => game.runsAgainst,
-                title: (game) => `${game.date} vs ${game.opponent}，失分 ${game.runsAgainst}`
-              }
-            ]
+            baseline: trends.season.runDifferentialPerGame,
+            label: `近 ${trends.windowSize} 場場均得失分差 ${formatSignedTrendDecimal(latest.runDifferentialPerGame)}，本季 ${formatSignedTrendDecimal(trends.season.runDifferentialPerGame)}`,
+            performanceBand: 0.25,
+            guideLabels: ["正分差", "0", "負分差"],
+            series: [{
+              className: "is-form",
+              value: (point) => point.runDifferentialPerGame,
+              title: (point) => `${point.date} vs ${point.opponent || "-"}；近 ${trends.windowSize} 場場均得失分差 ${formatSignedTrendDecimal(point.runDifferentialPerGame)}`
+            }],
+            observationSeries: []
           })}
-          <div class="cpbl-rfv-trend-season">本季：得分 ${escapeHtml(formatTrendDecimal(trends.season.runsPerGame))}／失分 ${escapeHtml(formatTrendDecimal(trends.season.runsAllowedPerGame))}</div>
           ${renderTrendAxis(trends.seasonGameCount)}
         </figure>
       </div>
@@ -350,14 +365,20 @@
     const timeline = Array.isArray(trends.timeline) ? trends.timeline : trends.points;
     const definitions = trends.playerType === "pitcher"
       ? [
-        { title: "ERA", key: "era", maximum: 6, format: formatTrendPitching },
-        { title: "WHIP", key: "whip", maximum: 2, format: formatTrendPitching }
+        { title: "ERA 狀態", key: "era", formKey: "eraForm", format: formatTrendPitching },
+        { title: "WHIP 狀態", key: "whip", formKey: "whipForm", format: formatTrendPitching }
       ]
       : [
-        { title: "打擊率", key: "avg", maximum: 0.5, format: formatTrendRate },
-        { title: "OPS", key: "ops", maximum: 1.2, format: formatTrendRate }
+        { title: "打擊率狀態", key: "avg", formKey: "avgForm", format: formatTrendRate },
+        { title: "OPS 狀態", key: "ops", formKey: "opsForm", format: formatTrendRate }
       ];
-    const recentTimeline = timeline.slice(Math.max(0, trends.recentStartGame - 1));
+    const recentEndGame = Number.isFinite(trends.recentEndGame)
+      ? trends.recentEndGame
+      : trends.seasonGameCount;
+    const recentTimeline = timeline.slice(
+      Math.max(0, trends.recentStartGame - 1),
+      Math.max(0, recentEndGame)
+    );
     const recentDateRange = formatCompactDateRange(recentTimeline);
     const hasLongGap = findTrendGaps(timeline).length > 0;
     const section = document.createElement("section");
@@ -366,9 +387,9 @@
       <div class="cpbl-rfv-trends-heading">
         <div>
           <div class="cpbl-rfv-trends-title">整季走勢</div>
-          <div class="cpbl-rfv-trends-caption">場次等距，折線為近 ${escapeHtml(trends.windowSize)} 場移動平均，虛線為本季平均${hasLongGap ? "；圖中標記 14 天以上間隔" : ""}</div>
+          <div class="cpbl-rfv-trends-caption">上方代表優於本季，下方代表低於本季；折線為近 ${escapeHtml(trends.windowSize)} 場移動平均${hasLongGap ? "，圖中標記 14 天以上間隔" : ""}</div>
         </div>
-        <div class="cpbl-rfv-trends-meta">近期 ${escapeHtml(recentDateRange)} · 本季 ${escapeHtml(trends.seasonGameCount)} 場</div>
+        <div class="cpbl-rfv-trends-meta">${trends.scopeMode === "date" ? "所選" : "近期"} ${escapeHtml(recentDateRange)} · 本季 ${escapeHtml(trends.seasonGameCount)} 場</div>
       </div>
       <div class="cpbl-rfv-trend-grid">
         ${definitions.map((definition, index) => renderPlayerTrendCard({ ...trends, timeline }, definition, index === 0)).join("")}
@@ -379,18 +400,19 @@
 
   function renderPlayerTrendCard(trends, definition, showGapMarkers) {
     const latest = trends.points[trends.points.length - 1];
-    const values = trends.points.map((point) => point[definition.key])
-      .concat([trends.season[definition.key]])
-      .filter(Number.isFinite);
-    const maximum = Math.max(definition.maximum, Math.ceil(Math.max(...values) * 10) / 10);
+    const maximum = formChartMaximum(trends.points.map((point) => point[definition.formKey]));
     const currentValue = definition.format(latest[definition.key]);
     const seasonValue = definition.format(trends.season[definition.key]);
+    const latestStatus = trendStatus(latest[definition.formKey]);
     return `
       <figure class="cpbl-rfv-trend-card">
         <figcaption>
-          <strong>${escapeHtml(definition.title)}</strong>
+          <div class="cpbl-rfv-trend-title-group">
+            <strong>${escapeHtml(definition.title)}</strong>
+            <span class="cpbl-rfv-trend-status is-${latestStatus.tone}">${escapeHtml(latestStatus.label)}</span>
+          </div>
           <div class="cpbl-rfv-trend-legend">
-            <span class="cpbl-rfv-trend-key is-player">目前 ${escapeHtml(currentValue)}</span>
+            <span class="cpbl-rfv-trend-key is-form">最新 ${escapeHtml(currentValue)}</span>
             <span class="cpbl-rfv-trend-key is-season">本季 ${escapeHtml(seasonValue)}</span>
           </div>
         </figcaption>
@@ -400,15 +422,17 @@
           observationSeries: [],
           seasonGameCount: trends.seasonGameCount,
           recentStartGame: trends.recentStartGame,
-          minimum: 0,
+          recentEndGame: trends.recentEndGame,
+          minimum: -maximum,
           maximum,
-          baseline: trends.season[definition.key],
-          label: `近 ${trends.windowSize} 場${definition.title}走勢，目前 ${currentValue}，本季 ${seasonValue}`,
+          label: `近 ${trends.windowSize} 場${definition.title}，${latestStatus.label}，最新 ${currentValue}，本季 ${seasonValue}`,
+          performanceBand: 0.05,
+          guideLabels: ["較佳", "本季", "較差"],
           gapTimeline: showGapMarkers ? trends.timeline : [],
           series: [{
-            className: "is-player",
-            value: (point) => point[definition.key],
-            title: (point) => `${formatCompactDate(point.date)} vs ${point.opponent || "-"}；${formatCompactDateRange([point.windowStartDate, point.windowEndDate])} 近 ${trends.windowSize} 場${definition.title} ${definition.format(point[definition.key])}`
+            className: "is-form",
+            value: (point) => point[definition.formKey],
+            title: (point) => `${formatCompactDate(point.date)} vs ${point.opponent || "-"}；${formatCompactDateRange([point.windowStartDate, point.windowEndDate])} 近 ${trends.windowSize} 場${definition.title.replace("狀態", "").trim()} ${definition.format(point[definition.key])}，${trendStatus(point[definition.formKey]).label}`
           }]
         })}
         ${renderTrendTimeAxis(trends.timeline, trends.seasonGameCount)}
@@ -416,7 +440,22 @@
     `;
   }
 
-  function renderTrendSvg({ points, observations, seasonGameCount, recentStartGame, minimum, maximum, baseline, label, series, observationSeries, gapTimeline = [] }) {
+  function renderTrendSvg({
+    points,
+    observations,
+    seasonGameCount,
+    recentStartGame,
+    recentEndGame = seasonGameCount,
+    minimum,
+    maximum,
+    baseline,
+    label,
+    series,
+    observationSeries,
+    gapTimeline = [],
+    performanceBand = null,
+    guideLabels = []
+  }) {
     const width = 600;
     const height = 132;
     const inset = { top: 10, right: 10, bottom: 10, left: 10 };
@@ -428,12 +467,28 @@
       return inset.top + ((maximum - clampedValue) / Math.max(0.0001, maximum - minimum)) * plotHeight;
     };
     const highlightStart = recentStartGame <= 1 ? inset.left : (x(recentStartGame - 1) + x(recentStartGame)) / 2;
-    const highlightWidth = inset.left + plotWidth - highlightStart;
-    const gridLines = [0, 0.25, 0.5, 0.75, 1]
+    const highlightEnd = recentEndGame >= seasonGameCount
+      ? inset.left + plotWidth
+      : (x(recentEndGame) + x(recentEndGame + 1)) / 2;
+    const highlightWidth = Math.max(0, highlightEnd - highlightStart);
+    const gridLines = [0, 0.5, 1]
       .map((ratio) => `<line class="cpbl-rfv-trend-gridline" x1="${inset.left}" y1="${inset.top + ratio * plotHeight}" x2="${inset.left + plotWidth}" y2="${inset.top + ratio * plotHeight}"></line>`)
       .join("");
+    const performanceZones = Number.isFinite(performanceBand)
+      ? renderPerformanceZones(y, inset, plotWidth, plotHeight, performanceBand)
+      : "";
+    const centerLine = minimum < 0 && maximum > 0
+      ? `<line class="cpbl-rfv-trend-centerline" x1="${inset.left}" y1="${y(0)}" x2="${inset.left + plotWidth}" y2="${y(0)}"></line>`
+      : "";
     const baselineLine = Number.isFinite(baseline)
       ? `<line class="cpbl-rfv-trend-baseline" x1="${inset.left}" y1="${y(baseline)}" x2="${inset.left + plotWidth}" y2="${y(baseline)}"></line>`
+      : "";
+    const guides = guideLabels.length === 3
+      ? `
+        <text class="cpbl-rfv-trend-guide is-better" x="${inset.left + 5}" y="${inset.top + 12}">${escapeHtml(guideLabels[0])}</text>
+        <text class="cpbl-rfv-trend-guide is-baseline" x="${inset.left + 5}" y="${y(0) - 5}">${escapeHtml(guideLabels[1])}</text>
+        <text class="cpbl-rfv-trend-guide is-worse" x="${inset.left + 5}" y="${inset.top + plotHeight - 5}">${escapeHtml(guideLabels[2])}</text>
+      `
       : "";
     const observationPoints = renderObservationPoints(observations, observationSeries, x, y, minimum, maximum);
     const gapMarkers = renderTrendGapMarkers(gapTimeline, x, inset, plotHeight);
@@ -450,9 +505,20 @@
     }).join("");
     return `
       <svg class="cpbl-rfv-trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)}">
+        ${performanceZones}
         <rect class="cpbl-rfv-trend-highlight" x="${highlightStart}" y="${inset.top}" width="${highlightWidth}" height="${plotHeight}"></rect>
-        ${gridLines}${baselineLine}${gapMarkers}${observationPoints}${paths}
+        ${gridLines}${centerLine}${baselineLine}${guides}${gapMarkers}${observationPoints}${paths}
       </svg>
+    `;
+  }
+
+  function renderPerformanceZones(y, inset, plotWidth, plotHeight, band) {
+    const betterEnd = y(band);
+    const worseStart = y(-band);
+    return `
+      <rect class="cpbl-rfv-trend-zone is-better" x="${inset.left}" y="${inset.top}" width="${plotWidth}" height="${Math.max(0, betterEnd - inset.top)}"></rect>
+      <rect class="cpbl-rfv-trend-zone is-steady" x="${inset.left}" y="${betterEnd}" width="${plotWidth}" height="${Math.max(0, worseStart - betterEnd)}"></rect>
+      <rect class="cpbl-rfv-trend-zone is-worse" x="${inset.left}" y="${worseStart}" width="${plotWidth}" height="${Math.max(0, inset.top + plotHeight - worseStart)}"></rect>
     `;
   }
 
@@ -601,8 +667,36 @@
     return Number.isFinite(value) ? value.toFixed(1) : "-";
   }
 
+  function formatSignedTrendDecimal(value) {
+    if (!Number.isFinite(value)) return "-";
+    const formatted = value.toFixed(1);
+    return value > 0 ? `+${formatted}` : formatted;
+  }
+
   function formatTrendPitching(value) {
     return Number.isFinite(value) ? value.toFixed(2) : "-";
+  }
+
+  function formChartMaximum(values) {
+    const finiteValues = values.filter(Number.isFinite).map(Math.abs);
+    const observedMaximum = finiteValues.length ? Math.max(...finiteValues) : 0;
+    return Math.min(1, Math.max(0.25, Math.ceil(observedMaximum * 10) / 10));
+  }
+
+  function trendStatus(value, options = {}) {
+    const threshold = Number.isFinite(options.threshold) ? options.threshold : 0.05;
+    if (!Number.isFinite(value)) return { tone: "unavailable", label: "資料不足" };
+    if (options.unit === "runs") {
+      if (Math.abs(value) < threshold) return { tone: "even", label: "攻守持平" };
+      return value > 0
+        ? { tone: "positive", label: `正分差 ${formatSignedTrendDecimal(value)}` }
+        : { tone: "negative", label: `負分差 ${formatSignedTrendDecimal(value)}` };
+    }
+    if (Math.abs(value) < threshold) return { tone: "even", label: "接近本季" };
+    const percent = `${Math.round(Math.abs(value) * 100)}%`;
+    return value > 0
+      ? { tone: "positive", label: `狀態佳 +${percent}` }
+      : { tone: "negative", label: `狀態偏低 -${percent}` };
   }
 
   function renderPlayerDetails(panel, data) {
@@ -747,6 +841,34 @@
     `;
   }
 
+  function renderScopeControl(data, countOptions) {
+    const isDate = data.scopeMode === "date";
+    return `
+      <div class="cpbl-rfv-stat-scope">
+        <div class="cpbl-rfv-scope-switch" role="group" aria-label="統計範圍類型">
+          <button type="button" class="cpbl-rfv-scope-button${isDate ? "" : " is-active"}" data-scope-mode="count" aria-pressed="${!isDate}">近幾場</button>
+          <button type="button" class="cpbl-rfv-scope-button${isDate ? " is-active" : ""}" data-scope-mode="date" aria-pressed="${isDate}">日期範圍</button>
+        </div>
+        ${isDate ? renderDateRangeControl(data) : renderCountControl(data.count, countOptions)}
+      </div>
+    `;
+  }
+
+  function displayScopeLabel(data) {
+    return data.scopeLabel || `近 ${data.games?.length || data.count || 0} 場`;
+  }
+
+  function renderDateRangeControl(data) {
+    return `
+      <div class="cpbl-rfv-date-control" role="group" aria-label="自訂日期範圍">
+        <label><span>開始</span><input type="date" data-date-start value="${escapeHtml(data.scopeStartDate)}" min="${escapeHtml(data.availableStartDate)}" max="${escapeHtml(data.availableEndDate)}"></label>
+        <span class="cpbl-rfv-date-separator" aria-hidden="true">至</span>
+        <label><span>結束</span><input type="date" data-date-end value="${escapeHtml(data.scopeEndDate)}" min="${escapeHtml(data.availableStartDate)}" max="${escapeHtml(data.availableEndDate)}"></label>
+        <button type="button" class="cpbl-rfv-date-apply" data-date-range-apply>套用</button>
+      </div>
+    `;
+  }
+
   function attachCountControl(root, onCountChange) {
     root.querySelectorAll("[data-game-count]").forEach((button) => {
       button.addEventListener("click", async () => {
@@ -756,6 +878,53 @@
           await onCountChange(count);
         } catch (error) {
           console.debug("[CPBL RFV] unable to change game count", error);
+        }
+      });
+    });
+  }
+
+  function attachScopeControl(root, data, onDateRangeChange) {
+    if (typeof onDateRangeChange !== "function") return;
+    root.querySelectorAll("[data-scope-mode]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const mode = button.dataset.scopeMode;
+        if (!mode || button.classList.contains("is-active")) return;
+        const nextValue = mode === "date"
+          ? {
+            mode: "date",
+            startDate: data.scopeStartDate || data.defaultStartDate,
+            endDate: data.scopeEndDate || data.defaultEndDate
+          }
+          : { mode: "count" };
+        try {
+          await onDateRangeChange(nextValue);
+        } catch (error) {
+          console.debug("[CPBL RFV] unable to change statistic scope", error);
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-date-range-apply]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const control = button.closest(".cpbl-rfv-date-control");
+        const startInput = control?.querySelector("[data-date-start]");
+        const endInput = control?.querySelector("[data-date-end]");
+        if (!startInput?.value || !endInput?.value || startInput.value > endInput.value) {
+          if (startInput?.value > endInput?.value) {
+            endInput.setCustomValidity("結束日期不能早於開始日期");
+          }
+          (startInput?.value ? endInput : startInput)?.reportValidity();
+          return;
+        }
+        endInput.setCustomValidity("");
+        try {
+          await onDateRangeChange({
+            mode: "date",
+            startDate: startInput.value,
+            endDate: endInput.value
+          });
+        } catch (error) {
+          console.debug("[CPBL RFV] unable to apply date range", error);
         }
       });
     });

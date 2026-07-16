@@ -59,6 +59,22 @@ test("excludes today's appearance when describing the previous pitching date", (
   assert.ok(Math.abs(result.trends.points[1].whip - (9 / 7)) < 0.000001);
 });
 
+test("normalizes player trends so upward always means better", () => {
+  const result = RecentForm.build({
+    kind: "player",
+    playerType: "pitcher",
+    games: [
+      { date: "2026/05/01", inningsOuts: 9, earnedRuns: 3, hitsAllowed: 5, walks: 2 },
+      { date: "2026/05/08", inningsOuts: 9, earnedRuns: 0, hitsAllowed: 1, walks: 0 },
+      { date: "2026/05/15", inningsOuts: 9, earnedRuns: 0, hitsAllowed: 1, walks: 0 }
+    ]
+  }, { count: 1 });
+
+  assert.ok(result.trends.points[0].eraForm < 0);
+  assert.ok(result.trends.points[2].eraForm > 0);
+  assert.ok(result.trends.points[2].whipForm > 0);
+});
+
 test("compares recent batter metrics against the full current season", () => {
   const source = {
     kind: "player",
@@ -174,6 +190,8 @@ test("sorts team games newest first before calculating form", () => {
     { gameNumber: 2, result: "W", runsFor: 4, runsAgainst: 3, isRecent: true },
     { gameNumber: 3, result: "W", runsFor: 5, runsAgainst: 2, isRecent: true }
   ]);
+  assert.equal(result.trends.points[1].runDifferentialPerGame, 2);
+  assert.ok(result.trends.points[1].winForm > 0);
   assert.match(result.summary, /目前2連勝/);
 });
 
@@ -191,6 +209,44 @@ test("compares team run differential when the season baseline is zero", () => {
   assert.equal(result.metrics[3].comparison.label, "較佳 +1.0");
 });
 
+test("filters statistics by an inclusive custom date range", () => {
+  const result = RecentForm.build({
+    kind: "player",
+    playerType: "batter",
+    games: [
+      { date: "2026/05/01", atBats: 4, hits: 0, totalBases: 0 },
+      { date: "2026/05/10", atBats: 4, hits: 2, totalBases: 3 },
+      { date: "2026/05/20", atBats: 4, hits: 4, totalBases: 6 },
+      { date: "2026/06/01", atBats: 4, hits: 1, totalBases: 1 }
+    ]
+  }, {
+    count: 2,
+    baseline: "season",
+    dateRange: { mode: "date", startDate: "2026-05-10", endDate: "2026-05-20" }
+  });
+
+  assert.equal(result.scopeMode, "date");
+  assert.equal(result.scopeLabel, "期間 2 場");
+  assert.equal(result.dateRange, "2026/05/10 - 2026/05/20");
+  assert.deepEqual(result.games.map((game) => game.date), ["2026/05/20", "2026/05/10"]);
+  assert.equal(result.metrics[0].value, ".750");
+  assert.equal(result.metrics[0].comparison.baselineText, "本季 .438");
+  assert.equal(result.trends.windowSize, 2);
+  assert.equal(result.trends.recentStartGame, 2);
+  assert.equal(result.trends.recentEndGame, 3);
+  assert.match(result.title, /2026\/05\/10 - 2026\/05\/20｜2 場｜比較本季/);
+});
+
 test("rejects unknown source kinds at the interface", () => {
   assert.throws(() => RecentForm.build({ kind: "unknown", games: [] }), TypeError);
+});
+
+test("returns an empty state when CPBL has no game rows", () => {
+  const player = RecentForm.build({ kind: "player", playerType: "batter", games: [] }, { count: 5 });
+  const team = RecentForm.build({ kind: "team", games: [] }, { count: 10 });
+
+  assert.equal(player.hasData, false);
+  assert.equal(player.trends.points.length, 0);
+  assert.equal(team.hasData, false);
+  assert.equal(team.trends.points.length, 0);
 });

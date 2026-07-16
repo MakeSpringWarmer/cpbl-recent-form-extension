@@ -84,6 +84,114 @@
   padding: 4px;
 }
 
+.cpbl-rfv-stat-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.cpbl-rfv-scope-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 2px;
+  border: 1px solid #d6dee8;
+  border-radius: 6px;
+  background: var(--rfv-soft);
+  padding: 3px;
+}
+
+.cpbl-rfv-scope-button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #526170;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.cpbl-rfv-scope-button:hover {
+  background: #edf3f8;
+  color: var(--rfv-primary);
+}
+
+.cpbl-rfv-scope-button:focus-visible,
+.cpbl-rfv-date-apply:focus-visible,
+.cpbl-rfv-date-control input:focus-visible {
+  outline: 2px solid var(--rfv-primary);
+  outline-offset: 2px;
+}
+
+.cpbl-rfv-scope-button.is-active {
+  background: #fff;
+  color: var(--rfv-primary);
+  box-shadow: 0 1px 3px rgba(31, 41, 55, 0.12);
+}
+
+.cpbl-rfv-date-control {
+  display: inline-flex;
+  align-items: end;
+  gap: 6px;
+  border: 1px solid #d6dee8;
+  border-radius: 6px;
+  background: #fff;
+  padding: 5px 6px;
+}
+
+.cpbl-rfv-date-control label {
+  display: grid;
+  gap: 2px;
+}
+
+.cpbl-rfv-date-control label span {
+  color: var(--rfv-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cpbl-rfv-date-control input {
+  width: 126px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--rfv-soft);
+  color: var(--rfv-ink);
+  font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  padding: 3px 5px;
+}
+
+.cpbl-rfv-date-separator {
+  align-self: center;
+  color: var(--rfv-muted);
+  font-size: 11px;
+  margin-top: 10px;
+}
+
+.cpbl-rfv-date-apply {
+  min-height: 31px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--rfv-primary);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
+.cpbl-rfv-date-apply:hover {
+  background: #254965;
+}
+
 .cpbl-rfv-count-label {
   color: var(--rfv-muted);
   font-size: 12px;
@@ -137,6 +245,10 @@
   padding: 9px 16px;
   border-bottom: 1px solid var(--rfv-line);
   background: #fff;
+}
+
+.cpbl-rfv-scope-bar.is-team {
+  min-height: 50px;
 }
 
 .cpbl-rfv-baseline-control {
@@ -778,10 +890,38 @@
   min-height: 34px;
 }
 
-.cpbl-rfv-trend-card figcaption > strong {
+.cpbl-rfv-trend-title-group > strong {
   color: var(--rfv-ink);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.cpbl-rfv-trend-title-group {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+}
+
+.cpbl-rfv-trend-status {
+  border-radius: 4px;
+  background: #eef2f6;
+  color: var(--rfv-steady);
+  font-family: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 6px;
+  white-space: nowrap;
+}
+
+.cpbl-rfv-trend-status.is-positive {
+  background: #e8f2ef;
+  color: #39766d;
+}
+
+.cpbl-rfv-trend-status.is-negative {
+  background: #f7ecea;
+  color: #a25b52;
 }
 
 .cpbl-rfv-trend-legend {
@@ -813,6 +953,10 @@
   border-top-style: dashed;
 }
 
+.cpbl-rfv-trend-key.is-form::before {
+  border-top-color: #315a7d;
+}
+
 .cpbl-rfv-trend-key.is-season::before {
   border-top-color: #697887;
 }
@@ -835,6 +979,19 @@
 
 .cpbl-rfv-trend-highlight {
   fill: #edf3f8;
+  opacity: 0.58;
+}
+
+.cpbl-rfv-trend-zone.is-better {
+  fill: #eef5f2;
+}
+
+.cpbl-rfv-trend-zone.is-steady {
+  fill: #e8eef3;
+}
+
+.cpbl-rfv-trend-zone.is-worse {
+  fill: #f8efed;
 }
 
 .cpbl-rfv-trend-gridline {
@@ -848,6 +1005,32 @@
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
   vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-centerline {
+  stroke: #7a8794;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.cpbl-rfv-trend-guide {
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.cpbl-rfv-trend-guide.is-better {
+  fill: #39766d;
+}
+
+.cpbl-rfv-trend-guide.is-baseline {
+  fill: #657383;
+}
+
+.cpbl-rfv-trend-guide.is-worse {
+  fill: #a25b52;
 }
 
 .cpbl-rfv-trend-line {
@@ -866,6 +1049,11 @@
 .cpbl-rfv-trend-line.is-allowed {
   stroke: #a25b52;
   stroke-dasharray: 6 4;
+}
+
+.cpbl-rfv-trend-line.is-form {
+  stroke: #315a7d;
+  stroke-width: 3;
 }
 
 .cpbl-rfv-trend-observation {
@@ -919,6 +1107,10 @@
 
 .cpbl-rfv-trend-point.is-allowed {
   fill: #a25b52;
+}
+
+.cpbl-rfv-trend-point.is-form {
+  fill: #315a7d;
 }
 
 .cpbl-rfv-trend-hit {
@@ -1244,7 +1436,43 @@
   }
 
   .cpbl-rfv-scope-actions {
+    align-items: flex-start;
+    flex-direction: column;
     justify-content: space-between;
+  }
+
+  .cpbl-rfv-stat-scope {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .cpbl-rfv-scope-switch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .cpbl-rfv-date-control {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .cpbl-rfv-date-control input {
+    box-sizing: border-box;
+    min-height: 38px;
+    width: 100%;
+  }
+
+  .cpbl-rfv-date-apply {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .cpbl-rfv-date-separator {
+    align-self: end;
+    margin-bottom: 12px;
   }
 
   .cpbl-rfv-summary {

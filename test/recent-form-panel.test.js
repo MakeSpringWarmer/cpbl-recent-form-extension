@@ -55,9 +55,9 @@ test("mounts once and owns loading and ready states", () => {
           { gameNumber: 4, date: "2026/06/27", opponent: "D" }
         ],
         points: [
-          { gameNumber: 2, date: "2026/04/03", opponent: "B", windowStartDate: "2026/04/01", windowEndDate: "2026/04/03", avg: 0.25, ops: 0.65 },
-          { gameNumber: 3, date: "2026/05/20", opponent: "C", windowStartDate: "2026/04/03", windowEndDate: "2026/05/20", avg: 0.3, ops: 0.76 },
-          { gameNumber: 4, date: "2026/06/27", opponent: "D", windowStartDate: "2026/05/20", windowEndDate: "2026/06/27", avg: 0.325, ops: 0.81 }
+          { gameNumber: 2, date: "2026/04/03", opponent: "B", windowStartDate: "2026/04/01", windowEndDate: "2026/04/03", avg: 0.25, ops: 0.65, avgForm: -0.091, opsForm: -0.097 },
+          { gameNumber: 3, date: "2026/05/20", opponent: "C", windowStartDate: "2026/04/03", windowEndDate: "2026/05/20", avg: 0.3, ops: 0.76, avgForm: 0.091, opsForm: 0.056 },
+          { gameNumber: 4, date: "2026/06/27", opponent: "D", windowStartDate: "2026/05/20", windowEndDate: "2026/06/27", avg: 0.325, ops: 0.81, avgForm: 0.182, opsForm: 0.125 }
         ]
       },
       games: [{ date: "2026/06/27", opponent: "測試隊", plateAppearances: 4, atBats: 3, hits: 1, homeRuns: 0, walks: 1 }]
@@ -67,21 +67,26 @@ test("mounts once and owns loading and ready states", () => {
   const html = collectHtml(document.mount.inserted);
   assert.match(html, /近 5 場表現/);
   assert.match(html, /分析方式/);
+  assert.match(html, /data-scope-mode="date"/);
+  assert.match(html, /日期範圍/);
   assert.match(html, /data-baseline="none"/);
   assert.match(html, /近況/);
   assert.match(html, /\.300/);
   assert.match(html, /整季走勢/);
   assert.match(html, /打擊率/);
   assert.match(html, /OPS/);
-  assert.match(html, /cpbl-rfv-trend-line is-player/);
-  assert.match(html, /目前 \.325/);
+  assert.match(html, /cpbl-rfv-trend-line is-form/);
+  assert.match(html, /cpbl-rfv-trend-zone is-better/);
+  assert.match(html, /上方代表優於本季/);
+  assert.match(html, /狀態佳 \+18%/);
+  assert.match(html, /最新 \.325/);
   assert.match(html, /本季 \.275/);
   assert.match(html, /近期 5\/20–6\/27/);
   assert.match(html, /4月/);
   assert.match(html, /5月/);
   assert.match(html, /6月/);
   assert.match(html, /相隔 47 天/);
-  assert.match(html, /6\/27 vs D；5\/20–6\/27 近 2 場打擊率 \.325/);
+  assert.match(html, /6\/27 vs D；5\/20–6\/27 近 2 場打擊率 \.325，狀態佳 \+18%/);
   assert.match(html, /tabindex="0"/);
   assert.doesNotMatch(html, /cpbl-rfv-benchmark/);
 
@@ -170,6 +175,46 @@ test("mounts once and owns loading and ready states", () => {
     status: "ready",
     data: {
       kind: "player",
+      playerType: "batter",
+      playerTypeLabel: "打者",
+      baseline: "none",
+      baselineOptions: [
+        { value: "none", label: "近況", available: true },
+        { value: "season", label: "比較本季", available: true },
+        { value: "career", label: "比較生涯", available: false }
+      ],
+      title: "2026/05/01 - 2026/05/31｜3 場表現",
+      count: 5,
+      scopeMode: "date",
+      scopeLabel: "期間 3 場",
+      scopeStartDate: "2026-05-01",
+      scopeEndDate: "2026-05-31",
+      availableStartDate: "2026-03-20",
+      availableEndDate: "2026-06-27",
+      defaultStartDate: "2026-06-10",
+      defaultEndDate: "2026-06-27",
+      hasData: true,
+      showDetails: false,
+      dateRange: "2026/05/01 - 2026/05/31",
+      summary: "期間 3 場測試摘要。",
+      comparisonSummary: "",
+      metrics: [{ label: "AVG", value: ".300", note: "3 H / 10 AB" }],
+      games: []
+    }
+  });
+
+  const dateRangeHtml = collectHtml(document.mount.inserted);
+  assert.match(dateRangeHtml, /data-date-start/);
+  assert.match(dateRangeHtml, /value="2026-05-01"/);
+  assert.match(dateRangeHtml, /data-date-end/);
+  assert.match(dateRangeHtml, /value="2026-05-31"/);
+  assert.match(dateRangeHtml, /套用/);
+  assert.match(dateRangeHtml, /期間 3 場測試摘要/);
+
+  panel.update({
+    status: "ready",
+    data: {
+      kind: "player",
       playerType: "pitcher",
       playerTypeLabel: "投手",
       baseline: "season",
@@ -203,8 +248,8 @@ test("mounts once and owns loading and ready states", () => {
           { gameNumber: 3, date: "2026/05/15", opponent: "C" }
         ],
         points: [
-          { gameNumber: 2, date: "2026/05/08", opponent: "B", windowStartDate: "2026/05/01", windowEndDate: "2026/05/08", era: 3.5, whip: 1.3 },
-          { gameNumber: 3, date: "2026/05/15", opponent: "C", windowStartDate: "2026/05/08", windowEndDate: "2026/05/15", era: 2.5, whip: 1.1 }
+          { gameNumber: 2, date: "2026/05/08", opponent: "B", windowStartDate: "2026/05/01", windowEndDate: "2026/05/08", era: 3.5, whip: 1.3, eraForm: -0.094, whipForm: -0.083 },
+          { gameNumber: 3, date: "2026/05/15", opponent: "C", windowStartDate: "2026/05/08", windowEndDate: "2026/05/15", era: 2.5, whip: 1.1, eraForm: 0.219, whipForm: 0.083 }
         ]
       },
       games: []
@@ -217,10 +262,10 @@ test("mounts once and owns loading and ready states", () => {
   assert.match(pitcherHtml, /局數／場/);
   assert.match(pitcherHtml, /平均用球/);
   assert.match(pitcherHtml, /較多 11%/);
-  assert.match(pitcherHtml, /目前 2\.50/);
+  assert.match(pitcherHtml, /最新 2\.50/);
   assert.match(pitcherHtml, /本季 3\.20/);
-  assert.match(pitcherHtml, /目前 1\.10/);
-  assert.match(pitcherHtml, /5\/15 vs C；5\/8–5\/15 近 2 場ERA 2\.50/);
+  assert.match(pitcherHtml, /最新 1\.10/);
+  assert.match(pitcherHtml, /5\/15 vs C；5\/8–5\/15 近 2 場ERA 2\.50，狀態佳 \+22%/);
 });
 
 test("renders team season comparisons and rolling trend charts", () => {
@@ -252,12 +297,12 @@ test("renders team season comparisons and rolling trend charts", () => {
         windowSize: 5,
         seasonGameCount: 8,
         recentStartGame: 4,
-        season: { winPercentage: 0.625, runsPerGame: 4.3, runsAllowedPerGame: 3.8 },
+        season: { winPercentage: 0.625, runsPerGame: 4.3, runsAllowedPerGame: 3.8, runDifferentialPerGame: 0.5 },
         points: [
-          { gameNumber: 5, winPercentage: 0.6, runsPerGame: 4.0, runsAllowedPerGame: 3.8 },
-          { gameNumber: 6, winPercentage: 0.6, runsPerGame: 4.4, runsAllowedPerGame: 3.6 },
-          { gameNumber: 7, winPercentage: 0.8, runsPerGame: 4.8, runsAllowedPerGame: 3.2 },
-          { gameNumber: 8, winPercentage: 0.8, runsPerGame: 5.2, runsAllowedPerGame: 3.1 }
+          { gameNumber: 5, date: "2026/05/05", opponent: "E", winPercentage: 0.6, winForm: -0.04, runDifferentialPerGame: 0.2 },
+          { gameNumber: 6, date: "2026/05/06", opponent: "F", winPercentage: 0.6, winForm: -0.04, runDifferentialPerGame: 0.8 },
+          { gameNumber: 7, date: "2026/05/07", opponent: "G", winPercentage: 0.8, winForm: 0.28, runDifferentialPerGame: 1.6 },
+          { gameNumber: 8, date: "2026/05/08", opponent: "H", winPercentage: 0.8, winForm: 0.28, runDifferentialPerGame: 2.1 }
         ],
         observations: [
           { gameNumber: 1, date: "2026/05/01", opponent: "A", result: "W", runsFor: 5, runsAgainst: 2, isRecent: false },
@@ -280,19 +325,15 @@ test("renders team season comparisons and rolling trend charts", () => {
   const html = collectHtml(document.mount.inserted);
   assert.match(html, /相較本季，4 項較佳/);
   assert.match(html, /整季走勢/);
-  assert.match(html, /移動勝率/);
-  assert.match(html, /攻守走勢/);
-  assert.match(html, /cpbl-rfv-trend-line is-win/);
-  assert.match(html, /cpbl-rfv-trend-line is-scored/);
-  assert.match(html, /cpbl-rfv-trend-line is-allowed/);
-  assert.match(html, /cpbl-rfv-trend-observation is-result-w/);
-  assert.match(html, /cpbl-rfv-trend-observation is-result-l/);
-  assert.match(html, /cpbl-rfv-trend-observation is-result-t/);
-  assert.match(html, /cpbl-rfv-trend-observation is-scored is-recent/);
-  assert.match(html, /cpbl-rfv-trend-observation is-allowed is-recent/);
-  assert.doesNotMatch(html, /cpbl-rfv-trend-observation is-scored"/);
-  assert.doesNotMatch(html, /cpbl-rfv-trend-observation is-allowed"/);
-  assert.match(html, /攻守資料點僅顯示近期場次/);
+  assert.match(html, /勝率狀態/);
+  assert.match(html, /得失分差/);
+  assert.match(html, /圖表上方一律代表狀態較佳/);
+  assert.match(html, /狀態佳 \+28%/);
+  assert.match(html, /正分差 \+2\.1/);
+  assert.match(html, /cpbl-rfv-trend-line is-form/);
+  assert.doesNotMatch(html, /cpbl-rfv-trend-line is-scored/);
+  assert.doesNotMatch(html, /cpbl-rfv-trend-line is-allowed/);
+  assert.doesNotMatch(html, /cpbl-rfv-trend-observation/);
   assert.match(html, /2026\/05\/08 vs H/);
   assert.match(html, /d="M/);
   assert.match(html, /本季 \.625/);

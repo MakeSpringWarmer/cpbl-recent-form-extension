@@ -31,6 +31,7 @@
         "src/adapters/cpbl-source.js",
         "src/ui/recent-form-panel.js",
         "src/settings/game-count.js",
+        "src/settings/date-range.js",
         "src/settings/comparison-mode.js",
         "src/content.js"
       ],

@@ -128,6 +128,34 @@ test("player adapter reuses a fresh cache entry", async () => {
   assert.equal(source.career.appearances, 80);
 });
 
+test("player adapter falls back to stale cache after transient request failures", async () => {
+  const oldTimestamp = new Date(2026, 5, 26).getTime();
+  const cache = memoryStorage({
+    "follow:42:A:2026:內野手": {
+      updatedAt: oldTimestamp,
+      context: { year: "2026", defendStation: "內野手", isPitcher: false },
+      career: null,
+      rows: [{ GameDate: "2026/06/25", AtBatCnt: "4", HittingCnt: "2", TotalBases: "3" }]
+    }
+  });
+  let attempts = 0;
+  const source = await CpblSource.load({
+    document: fakePlayerDocument("defendStation: '內野手'; year: '2026'", "打擊成績"),
+    location: { pathname: "/team/follow", href: "https://cpbl.com.tw/team/follow?Acnt=42", origin: "https://cpbl.com.tw" },
+    fetch: async () => {
+      attempts += 1;
+      throw new TypeError("temporary network failure");
+    },
+    cache,
+    wait: async () => {},
+    now: new Date(2026, 5, 27).getTime()
+  });
+
+  assert.equal(attempts, 2);
+  assert.equal(source.games[0].date, "2026/06/25");
+  assert.equal(source.games[0].hits, 2);
+});
+
 test("team adapter hides table positions and normalizes the result", async () => {
   const cells = ["001", "洲際", "2026/6/26", "03:01", "測試隊", "5", "對手隊", "2", "測試隊"];
   const table = { querySelectorAll: () => [{ querySelectorAll: () => cells.map((textContent) => ({ textContent })) }] };

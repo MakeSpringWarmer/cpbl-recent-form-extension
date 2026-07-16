@@ -12,13 +12,14 @@
     const count = positiveInteger(options.count, 5);
     const now = validDate(options.now) || new Date();
     return source.kind === "team"
-      ? buildTeam(source, count)
-      : buildPlayer(source, count, now, options.baseline);
+      ? buildTeam(source, count, options.dateRange)
+      : buildPlayer(source, count, now, options.baseline, options.dateRange);
   }
 
-  function buildPlayer(source, count, now, requestedBaseline) {
+  function buildPlayer(source, count, now, requestedBaseline, requestedDateRange) {
     const sortedGames = sortNewest(source.games);
-    const recentGames = sortedGames.slice(0, count);
+    const scope = selectScope(sortedGames, count, requestedDateRange);
+    const recentGames = scope.games;
     const playerType = source.playerType === "pitcher" ? "pitcher" : "batter";
     const baseline = normalizeBaseline(requestedBaseline, source);
     const baselineLabel = baseline === "career" ? "生涯" : baseline === "season" ? "本季" : "";
@@ -34,14 +35,24 @@
       baseline,
       baselineLabel,
       baselineOptions,
-      title: baseline === "none" ? `近 ${count} 場表現` : `近 ${count} 場｜比較${baselineLabel}`,
+      title: baseline === "none" ? `${scope.title}表現` : `${scope.title}｜比較${baselineLabel}`,
       count,
+      scopeMode: scope.mode,
+      scopeLabel: scope.label,
+      scopeStartDate: scope.startDate,
+      scopeEndDate: scope.endDate,
+      availableStartDate: scope.availableStartDate,
+      availableEndDate: scope.availableEndDate,
+      defaultStartDate: scope.defaultStartDate,
+      defaultEndDate: scope.defaultEndDate,
       hasData: recentGames.length > 0,
       showDetails: true,
-      emptyMessage: "近期沒有可計算的出賽資料。可以直接調整上方場數再查看。",
-      dateRange: formatDateRange(recentGames),
+      emptyMessage: scope.mode === "date"
+        ? "選定日期內沒有可計算的出賽資料，請調整日期範圍。"
+        : "近期沒有可計算的出賽資料。可以直接調整上方場數再查看。",
+      dateRange: scope.displayDateRange,
       todayKey: dateKey(now),
-      trends: playerTrends(sortedGames, count, playerType)
+      trends: playerTrends(sortedGames, count, playerType, scope)
     };
 
     if (playerType === "pitcher") {
@@ -51,7 +62,7 @@
       if (baseline === "none") {
         return {
           ...common,
-          summary: summarizePitcher(displayGames, recentTotals, `近 ${displayGames.length} 場`, displayGames.length, now),
+          summary: summarizePitcher(displayGames, recentTotals, scope.label, displayGames.length, now),
           comparisonSummary: "",
           metrics: recentMetrics,
           games: displayGames
@@ -66,7 +77,7 @@
       const comparisonSummary = summarizeComparison(metrics, baselineLabel);
       return {
         ...common,
-        summary: summarizePitcher(displayGames, recentTotals, `近 ${displayGames.length} 場`, displayGames.length, now),
+        summary: summarizePitcher(displayGames, recentTotals, scope.label, displayGames.length, now),
         comparisonSummary,
         metrics,
         games: displayGames
@@ -78,7 +89,7 @@
     if (baseline === "none") {
       return {
         ...common,
-        summary: summarizeBatter(recentTotals, `近 ${recentGames.length} 場`),
+        summary: summarizeBatter(recentTotals, scope.label),
         comparisonSummary: "",
         metrics: recentMetrics,
         games: recentGames
@@ -89,7 +100,7 @@
     const comparisonSummary = summarizeComparison(metrics, baselineLabel);
     return {
       ...common,
-      summary: summarizeBatter(recentTotals, `近 ${recentGames.length} 場`),
+      summary: summarizeBatter(recentTotals, scope.label),
       comparisonSummary,
       metrics,
       games: recentGames
@@ -115,33 +126,43 @@
     };
   }
 
-  function playerTrends(seasonGames, count, playerType) {
+  function playerTrends(seasonGames, count, playerType, scope) {
     const chronologicalGames = seasonGames.slice().reverse();
     const windowSize = Math.min(count, chronologicalGames.length);
     const points = [];
-    for (let index = windowSize - 1; index < chronologicalGames.length; index += 1) {
-      const windowGames = chronologicalGames.slice(index - windowSize + 1, index + 1);
-      const metrics = playerType === "pitcher"
-        ? pitcherMetrics(windowGames.length, pitcherTotals(windowGames))
-        : batterMetrics(batterTotals(windowGames));
-      points.push(playerTrendPoint(index + 1, chronologicalGames[index], windowGames[0], metrics, playerType));
+    if (windowSize > 0) {
+      for (let index = windowSize - 1; index < chronologicalGames.length; index += 1) {
+        const windowGames = chronologicalGames.slice(index - windowSize + 1, index + 1);
+        const metrics = playerType === "pitcher"
+          ? pitcherMetrics(windowGames.length, pitcherTotals(windowGames))
+          : batterMetrics(batterTotals(windowGames));
+        points.push(playerTrendPoint(index + 1, chronologicalGames[index], windowGames[0], metrics, playerType));
+      }
     }
     const seasonMetrics = playerType === "pitcher"
       ? pitcherMetrics(chronologicalGames.length, pitcherTotals(chronologicalGames))
       : batterMetrics(batterTotals(chronologicalGames));
+    const season = playerTrendValues(seasonMetrics, playerType);
     const seasonGameCount = chronologicalGames.length;
+    const bounds = scopeGameBounds(chronologicalGames, scope.games);
     return {
       playerType,
+      scopeMode: scope.mode,
+      scopeLabel: scope.label,
       windowSize,
       seasonGameCount,
-      recentStartGame: Math.max(1, seasonGameCount - count + 1),
+      recentStartGame: bounds.start,
+      recentEndGame: bounds.end,
       timeline: chronologicalGames.map((game, index) => ({
         gameNumber: index + 1,
         date: game.date,
         opponent: game.opponent
       })),
-      season: playerTrendValues(seasonMetrics, playerType),
-      points
+      season,
+      points: points.map((point) => ({
+        ...point,
+        ...playerTrendFormValues(point, season, playerType)
+      }))
     };
   }
 
@@ -162,9 +183,22 @@
       : { avg: metrics[0].rawValue, ops: metrics[3].rawValue };
   }
 
-  function buildTeam(source, count) {
+  function playerTrendFormValues(point, season, playerType) {
+    return playerType === "pitcher"
+      ? {
+        eraForm: performanceDelta(point.era, season.era, "lower"),
+        whipForm: performanceDelta(point.whip, season.whip, "lower")
+      }
+      : {
+        avgForm: performanceDelta(point.avg, season.avg, "higher"),
+        opsForm: performanceDelta(point.ops, season.ops, "higher")
+      };
+  }
+
+  function buildTeam(source, count, requestedDateRange) {
     const seasonGames = sortNewest(source.games);
-    const games = seasonGames.slice(0, count);
+    const scope = selectScope(seasonGames, count, requestedDateRange);
+    const games = scope.games;
     const totals = teamTotals(games);
     const seasonTotals = teamTotals(seasonGames);
     const metrics = compareMetrics(
@@ -176,14 +210,25 @@
       kind: "team",
       teamName: source.teamName || "球隊",
       count,
+      scopeMode: scope.mode,
+      scopeLabel: scope.label,
+      scopeStartDate: scope.startDate,
+      scopeEndDate: scope.endDate,
+      availableStartDate: scope.availableStartDate,
+      availableEndDate: scope.availableEndDate,
+      defaultStartDate: scope.defaultStartDate,
+      defaultEndDate: scope.defaultEndDate,
       hasData: games.length > 0,
       games,
       seasonGameCount: seasonGames.length,
-      dateRange: formatDateRange(games),
+      dateRange: scope.displayDateRange,
+      emptyMessage: scope.mode === "date"
+        ? "選定日期內沒有可計算的球隊賽事，請調整日期範圍。"
+        : "目前沒有可計算的近期比賽。",
       metrics,
       comparisonSummary: summarizeComparison(metrics, "本季"),
-      trends: teamTrends(seasonGames, count, seasonTotals),
-      summary: summarizeTeam(games, totals)
+      trends: teamTrends(seasonGames, count, seasonTotals, scope),
+      summary: summarizeTeam(games, totals, scope.label)
     };
   }
 
@@ -398,24 +443,29 @@
     ];
   }
 
-  function teamTrends(seasonGames, count, seasonTotals) {
+  function teamTrends(seasonGames, count, seasonTotals, scope) {
     const chronologicalGames = seasonGames.slice().reverse();
     const windowSize = Math.min(count, chronologicalGames.length);
     const points = [];
-    for (let index = windowSize - 1; index < chronologicalGames.length; index += 1) {
-      const windowGames = chronologicalGames.slice(index - windowSize + 1, index + 1);
-      const totals = teamTotals(windowGames);
+    if (windowSize > 0) {
+      for (let index = windowSize - 1; index < chronologicalGames.length; index += 1) {
+        const windowGames = chronologicalGames.slice(index - windowSize + 1, index + 1);
+        const totals = teamTotals(windowGames);
       points.push({
         gameNumber: index + 1,
         date: chronologicalGames[index].date,
         opponent: chronologicalGames[index].opponent,
         winPercentage: divide(totals.wins, totals.wins + totals.losses),
         runsPerGame: divide(totals.runsFor, windowGames.length),
-        runsAllowedPerGame: divide(totals.runsAgainst, windowGames.length)
+        runsAllowedPerGame: divide(totals.runsAgainst, windowGames.length),
+        runDifferentialPerGame: divide(totals.runsFor - totals.runsAgainst, windowGames.length)
       });
+      }
     }
     const seasonGameCount = chronologicalGames.length;
-    const recentStartGame = Math.max(1, seasonGameCount - count + 1);
+    const bounds = scopeGameBounds(chronologicalGames, scope.games);
+    const recentStartGame = bounds.start;
+    const recentEndGame = bounds.end;
     const observations = chronologicalGames.map((game, index) => ({
       gameNumber: index + 1,
       date: game.date,
@@ -423,26 +473,38 @@
       result: game.result,
       runsFor: number(game.runsFor),
       runsAgainst: number(game.runsAgainst),
-      isRecent: index + 1 >= recentStartGame
+      isRecent: index + 1 >= recentStartGame && index + 1 <= recentEndGame
     }));
+    const seasonWinPercentage = divide(seasonTotals.wins, seasonTotals.wins + seasonTotals.losses);
+    const seasonRunDifferential = divide(
+      seasonTotals.runsFor - seasonTotals.runsAgainst,
+      seasonGameCount
+    );
     return {
+      scopeMode: scope.mode,
+      scopeLabel: scope.label,
       windowSize,
       seasonGameCount,
       recentStartGame,
+      recentEndGame,
       season: {
-        winPercentage: divide(seasonTotals.wins, seasonTotals.wins + seasonTotals.losses),
+        winPercentage: seasonWinPercentage,
         runsPerGame: divide(seasonTotals.runsFor, seasonGameCount),
-        runsAllowedPerGame: divide(seasonTotals.runsAgainst, seasonGameCount)
+        runsAllowedPerGame: divide(seasonTotals.runsAgainst, seasonGameCount),
+        runDifferentialPerGame: seasonRunDifferential
       },
-      points,
+      points: points.map((point) => ({
+        ...point,
+        winForm: performanceDelta(point.winPercentage, seasonWinPercentage, "higher")
+      })),
       observations
     };
   }
 
-  function summarizeTeam(games, totals) {
+  function summarizeTeam(games, totals, scopeLabel) {
     if (games.length === 0) return "近期沒有可計算的比賽。";
     const latest = games[0];
-    return `近 ${games.length} 場 ${formatRecord(totals.wins, totals.losses, totals.ties)}，得失分 ${totals.runsFor}-${totals.runsAgainst}；目前${teamStreak(games)}，最近一場 ${formatDate(latest.date)} ${latest.homeAway}場對 ${latest.opponent} ${latest.result} ${latest.runsFor}-${latest.runsAgainst}。`;
+    return `${scopeLabel} ${formatRecord(totals.wins, totals.losses, totals.ties)}，得失分 ${totals.runsFor}-${totals.runsAgainst}；目前${teamStreak(games)}，最近一場 ${formatDate(latest.date)} ${latest.homeAway}場對 ${latest.opponent} ${latest.result} ${latest.runsFor}-${latest.runsAgainst}。`;
   }
 
   function teamStreak(games) {
@@ -455,6 +517,53 @@
     }
     const label = firstResult === "W" ? "連勝" : firstResult === "L" ? "連敗" : "連和";
     return `${count}${label}`;
+  }
+
+  function selectScope(sortedGames, count, requestedDateRange) {
+    const availableStartDate = toInputDate(sortedGames[sortedGames.length - 1]?.date);
+    const availableEndDate = toInputDate(sortedGames[0]?.date);
+    const defaultGames = sortedGames.slice(0, count);
+    const defaultStartDate = toInputDate(defaultGames[defaultGames.length - 1]?.date) || availableStartDate;
+    const defaultEndDate = toInputDate(defaultGames[0]?.date) || availableEndDate;
+    const requestedStart = toInputDate(requestedDateRange?.startDate);
+    const requestedEnd = toInputDate(requestedDateRange?.endDate);
+    const usesDateRange = requestedDateRange?.mode === "date" &&
+      requestedStart && requestedEnd && requestedStart <= requestedEnd;
+    const games = usesDateRange
+      ? sortedGames.filter((game) => {
+        const gameDate = toInputDate(game.date);
+        return gameDate && gameDate >= requestedStart && gameDate <= requestedEnd;
+      })
+      : defaultGames;
+    const startDate = usesDateRange ? requestedStart : "";
+    const endDate = usesDateRange ? requestedEnd : "";
+    return {
+      mode: usesDateRange ? "date" : "count",
+      games,
+      label: usesDateRange ? `期間 ${games.length} 場` : `近 ${games.length} 場`,
+      title: usesDateRange
+        ? `${formatDate(startDate)} - ${formatDate(endDate)}｜${games.length} 場`
+        : `近 ${count} 場`,
+      startDate,
+      endDate,
+      availableStartDate,
+      availableEndDate,
+      defaultStartDate,
+      defaultEndDate,
+      displayDateRange: usesDateRange
+        ? `${formatDate(startDate)} - ${formatDate(endDate)}`
+        : formatDateRange(games)
+    };
+  }
+
+  function scopeGameBounds(chronologicalGames, selectedGames) {
+    const selected = new Set(selectedGames);
+    const gameNumbers = chronologicalGames
+      .map((game, index) => selected.has(game) ? index + 1 : 0)
+      .filter(Boolean);
+    return gameNumbers.length > 0
+      ? { start: gameNumbers[0], end: gameNumbers[gameNumbers.length - 1] }
+      : { start: 1, end: 0 };
   }
 
   function sortNewest(games) {
@@ -496,6 +605,11 @@
     return date ? formatDate(date) : "";
   }
 
+  function toInputDate(value) {
+    const date = validDate(value);
+    return date ? `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` : "";
+  }
+
   function daysBetween(startValue, endValue) {
     const startDate = validDate(startValue);
     const endDate = validDate(endValue);
@@ -512,6 +626,12 @@
 
   function divide(numerator, denominator) {
     return denominator > 0 ? numerator / denominator : NaN;
+  }
+
+  function performanceDelta(current, baseline, direction) {
+    if (!Number.isFinite(current) || !Number.isFinite(baseline)) return NaN;
+    const delta = baseline === 0 ? current - baseline : (current - baseline) / Math.abs(baseline);
+    return direction === "lower" ? -delta : delta;
   }
 
   function positiveInteger(value, fallback) {

@@ -1,6 +1,6 @@
 (async function bootstrapRecentForm() {
-  const { RecentForm, CpblSource, RecentFormPanel, GameCount, ComparisonMode } = globalThis.CPBLRFV || {};
-  if (!RecentForm || !CpblSource || !RecentFormPanel || !GameCount || !ComparisonMode) {
+  const { RecentForm, CpblSource, RecentFormPanel, GameCount, DateRange, ComparisonMode } = globalThis.CPBLRFV || {};
+  if (!RecentForm || !CpblSource || !RecentFormPanel || !GameCount || !DateRange || !ComparisonMode) {
     console.debug("[CPBL RFV] modules were not loaded");
     return;
   }
@@ -8,15 +8,18 @@
   const mode = location.pathname.toLowerCase() === "/team/dailyrecord" ? "team" : "player";
   let source = null;
   let currentCount = null;
+  let currentDateRange = { mode: "count", startDate: "", endDate: "" };
   let currentBaseline = "none";
   let panel = null;
 
   try {
-    const [settings, comparisonMode] = await Promise.all([
+    const [settings, dateRange, comparisonMode] = await Promise.all([
       GameCount.load(mode, chrome.storage.sync),
+      DateRange.load(mode, chrome.storage.sync),
       mode === "player" ? ComparisonMode.load(chrome.storage.sync) : Promise.resolve("none")
     ]);
     currentCount = settings.count;
+    currentDateRange = dateRange;
     currentBaseline = comparisonMode;
     panel = RecentFormPanel.mount({
       document,
@@ -24,6 +27,11 @@
       countOptions: settings.options,
       async onCountChange(nextCount) {
         currentCount = await GameCount.save(mode, nextCount, chrome.storage.sync);
+        currentDateRange = await DateRange.save(mode, { mode: "count" }, chrome.storage.sync);
+        render();
+      },
+      async onDateRangeChange(nextDateRange) {
+        currentDateRange = await DateRange.save(mode, nextDateRange, chrome.storage.sync);
         render();
       },
       async onBaselineChange(nextBaseline) {
@@ -54,7 +62,12 @@
     if (!source || !panel) return;
     panel.update({
       status: "ready",
-      data: RecentForm.build(source, { count: currentCount, baseline: currentBaseline, now: new Date() })
+      data: RecentForm.build(source, {
+        count: currentCount,
+        dateRange: currentDateRange,
+        baseline: currentBaseline,
+        now: new Date()
+      })
     });
   }
 })();
