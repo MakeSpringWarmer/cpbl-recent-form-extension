@@ -1,6 +1,6 @@
 # Chrome Web Store Listing - CPBL Recent Form Visualizer
 
-> Last Updated: 2026-07-16
+> Last Updated: 2026-07-20
 
 ## Store Listing
 
@@ -22,6 +22,8 @@ CPBL Recent Form Visualizer
 
 資料只來自 CPBL 官網公開數據。擴充功能沒有廣告、分析追蹤、登入系統或遠端後端。
 
+本擴充功能為非官方工具，與中華職棒大聯盟及各球團無隸屬、合作或背書關係。網站內容與統計資料仍以 CPBL 官網顯示為準。
+
 問題與建議：https://github.com/MakeSpringWarmer/cpbl-recent-form-extension/issues
 
 **Category**
@@ -41,14 +43,15 @@ Chinese (Traditional)
 | Asset | Dimensions | Status | Filename |
 |-------|-----------|--------|----------|
 | Store Icon | 128x128 PNG | Ready | `icons/icon-128.png` |
-| Screenshot 1 | 1280x800 or 640x400 | Needs update | Player comparisons and season trends |
-| Screenshot 2 | 1280x800 or 640x400 | Needs update | Pitcher calendar |
-| Screenshot 3 | 1280x800 or 640x400 | Needs update | Team season comparisons and trends |
+| Screenshot 1 | 1280x800 PNG | Ready | `store-assets/batter0.png` - Batter recent form and season trends |
+| Screenshot 2 | 1280x800 PNG | Ready | `store-assets/pitcher0.png` - Pitcher recent form and season trends |
+| Screenshot 3 | 1280x800 PNG | Ready | `store-assets/pitcher1.png` - Pitcher appearance calendar |
+| Screenshot 4 | 1280x800 PNG | Ready | `store-assets/team.png` - Team comparison, season trends, and recent results |
 | Small Promo Tile | 440x280 PNG | Ready | `store-assets/small-promo-440x280.png` |
 
 ### Screenshot Notes
 
-截圖需更新為新版狀態圖，呈現球員「近況」與本季／生涯比較模式、球員整季相對狀態、投手登板月曆，以及球隊勝率狀態、得失分差與近期賽果，並包含頁面內的場數／日期範圍控制。
+四張截圖已更新為 0.2.0 介面，涵蓋打者與投手近況及整季相對狀態、投手登板月曆，以及球隊比較、整季走勢與近期賽果。截圖亦呈現頁面內的統計場數與日期範圍控制。
 
 ## Permissions Justification
 
@@ -98,7 +101,8 @@ https://makespringwarmer.github.io/cpbl-recent-form-extension/privacy.html
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
-| 0.1.0 | 2026-07-16 | Initial release with player and team comparisons, intuitive season-relative form charts, pitcher calendar, and selectable recent-game or custom date-range statistics. | Draft |
+| 0.2.0 | 2026-07-20 | Added custom date-range statistics, clearer season-relative status trend charts, and more resilient CPBL data loading with retry and cached fallback. | Draft |
+| 0.1.0 | 2026-07-16 | Initial release with player and team comparisons, season trends, pitcher calendar, and selectable recent-game statistics. | Published |
 
 ## Review Notes
 
@@ -106,7 +110,6 @@ https://makespringwarmer.github.io/cpbl-recent-form-extension/privacy.html
 
 - Only supported CPBL official player and daily-record pages are modified.
 - Display depends on the current structure and availability of CPBL public data.
-- Current screenshots and contact email remain required before submission.
 
 ### Rejection History
 

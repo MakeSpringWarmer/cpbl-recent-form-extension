@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CPBL Recent Form Visualizer",
   "description": "在 CPBL 官網球員頁與球隊逐日戰績頁上方顯示近期表現。",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
